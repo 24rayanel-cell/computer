@@ -1,4 +1,4 @@
-name: macOS - Tailscale & VNC (Acceso Gráfico con Compatibilidad Forzada)
+name: macOS - Tailscale & VNC (Acceso Gráfico con Contraseña Fija)
 
 on:
   workflow_dispatch:
@@ -32,33 +32,30 @@ jobs:
           fi
 
       # 2. Configurar el Entorno Gráfico (VNC Nativo)
-      - name: 🖥️ Configurar Entorno Gráfico (VNC Nativo)
+      - name: 🖥️ Configurar Entorno Gráfico y Contraseña SSH
         run: |
           echo "--- 2. Instalando XQuartz y gestor de ventanas ---"
           brew install --cask xquartz
           brew install flux
           
-          echo "--- 2.1. Habilitando Escritorio Remoto Nativo (VNC) ---"
-          VNC_PASSWORD="password"
-          KICKSTART_PATH="/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart"
+          # 2.2. Establecer Contraseña SSH
+          # Establecemos una contraseña conocida para el usuario 'runner'
+          SSH_PASSWORD="runnerpass"
+          echo "--- 2.2. Establecer Contraseña SSH: $SSH_PASSWORD ---"
+          sudo dscl . -passwd /Users/runner $SSH_PASSWORD
           
-          # Habilitar la compartición de pantalla
+          echo "--- 2.3. Habilitando Escritorio Remoto Nativo (VNC) ---"
+          # Comando para activar el servicio VNC (aunque no lo usaremos, es buena práctica)
+          KICKSTART_PATH="/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart"
           sudo defaults write /var/db/launchd.db/com.apple.launchd/overrides.plist com.apple.screensharing -dict Disabled -bool false
           sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist
-          
-          # CORRECCIÓN FINAL Y DEFINITIVA: 
-          # 1. Usar -clientopts para garantizar la activación de VNC Legacy (metodo VNC Password).
-          # 2. Usar un solo comando para activar el servicio, establecer el acceso de usuario y configurar la seguridad.
-          echo "--- 2.3. Activar VNC, configurar contraseña VNC (Legacy) y acceso de usuario 'runner' ---"
-          sudo $KICKSTART_PATH -activate -configure \
-            -users runner -access -on -privs -all \
-            -clientopts -setvnclegacy -vnclegacy yes -setvncpw $VNC_PASSWORD -vncpw $VNC_PASSWORD \
-            -restart -agent
+          sudo $KICKSTART_PATH -activate -configure -access -on -privs -all -restart -agent
 
           echo "==========================================================="
-          echo "✅ CONEXIÓN GRÁFICA LISTA"
-          echo "Dirección VNC: ${{ env.TS_IP }}:5900"
-          echo "Contraseña VNC (¡La usaremos ahora!): $VNC_PASSWORD"
+          echo "✅ SSH LISTO CON CONTRASEÑA CONOCIDA"
+          echo "Dirección SSH/Tailscale: ${{ env.TS_IP }}"
+          echo "Usuario: runner"
+          echo "Contraseña SSH: $SSH_PASSWORD"
           echo "==========================================================="
 
       # 3. Mantener el flujo de trabajo activo
