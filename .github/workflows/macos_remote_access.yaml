@@ -1,4 +1,4 @@
-name: macOS - Tailscale & RustDesk Remote Access (TigerVNC Enabled)
+name: macOS - Tailscale & RustDesk Remote Access (TigerVNC Final)
 
 on:
   workflow_dispatch:
@@ -19,7 +19,6 @@ jobs:
           brew install tailscale
           
           echo "--- 1.1. Iniciando el servicio Tailscale (daemon) ---"
-          # Iniciar el daemon en segundo plano
           sudo tailscaled &
           sleep 5
 
@@ -28,28 +27,33 @@ jobs:
             exit 1 
           else
             echo "--- 1.2. Autenticando Tailscale ---"
-            sudo tailscale up --authkey=$TAILSCALE_AUTHKEY --hostname=github-mac-runner --accept-dns=false
-            # Capturamos la IP de Tailscale
-            TS_IP=$(tailscale status | grep github-mac-runner | awk '{print $1}')
-            echo "TS_IP=$TS_IP" >> $GITHUB_ENV # Guardamos la IP como variable de entorno
+            # Creamos un hostname único para evitar conflictos
+            HOSTNAME="github-mac-runner-$(uuidgen | head -c 8)"
+            sudo tailscale up --authkey=$TAILSCALE_AUTHKEY --hostname=$HOSTNAME --accept-dns=false
+            
+            # FILTRO CORREGIDO: Buscamos la IP del runner ACTIVO
+            TS_IP=$(tailscale status | grep $HOSTNAME | grep -v 'offline' | awk '{print $1}')
+            
             echo "✅ Tailscale está corriendo. IP Address:"
             tailscale status
+            
+            # Guardamos la IP en una variable de entorno para el siguiente paso
+            echo "TS_IP=$TS_IP" >> $GITHUB_ENV
+            echo "--- IP del Runner Activo: $TS_IP ---"
           fi
 
       # 2. Habilitar el Escritorio Remoto (VNC)
       - name: 🖥️ Instalar y Habilitar VNC Server (TigerVNC)
-        # Usamos la sintaxis de bloque literal para que el shell ejecute todo junto
         run: |
           echo "--- 2. Instalando un servidor VNC para acceso gráfico ---"
           brew install tiger-vnc
 
-          # Configuramos una contraseña de VNC y la inicializamos.
-          # Esto evita que el vncserver se quede esperando una entrada.
+          # Configuramos la contraseña de VNC 'password'
           mkdir -p ~/.vnc
           echo "password" | vncpasswd -f > ~/.vnc/passwd
           chmod 600 ~/.vnc/passwd
           
-          # Iniciar el servidor VNC
+          # Iniciar el servidor VNC en la pantalla :1
           vncserver :1 -geometry 1280x1024 -depth 24
           
           echo "==========================================================="
