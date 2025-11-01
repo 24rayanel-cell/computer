@@ -42,23 +42,20 @@ jobs:
       # 2. Configurar el Entorno Gráfico (VNC Nativo)
       - name: 🖥️ Configurar Entorno Gráfico (VNC Nativo)
         run: |
-          echo "--- 2. Instalando XQuartz (X11) ---"
+          echo "--- 2. Instalando XQuartz y gestor de ventanas ---"
           brew install --cask xquartz
-          
-          # CORRECCIÓN DE FÓRMULA: Instalamos el paquete 'flux' (gestor de ventanas)
-          echo "--- 2.1. Instalando Gestor de Ventanas (flux) ---"
           brew install flux
           
-          echo "--- 2.2. Habilitando Escritorio Remoto Nativo (VNC) ---"
-          # La contraseña debe ser de 8 caracteres
+          echo "--- 2.1. Habilitando Escritorio Remoto Nativo (VNC) ---"
           VNC_PASSWORD="password"
           
           # Habilitar la compartición de pantalla
           sudo defaults write /var/db/launchd.db/com.apple.launchd/overrides.plist com.apple.screensharing -dict Disabled -bool false
           sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist
           
-          # Ejecutar kickstart para configurar VNC con contraseña y privilegios
-          /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -accesson -users runner -privs -all -clientopts -setvnclegacy -vnclegacy yes -setvncpw $VNC_PASSWORD -vncpw $VNC_PASSWORD
+          # ¡CORREGIDO! Ejecutar kickstart con sudo para configurar VNC
+          echo "--- 2.2. Configurando VNC con Contraseña ---"
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -accesson -users runner -privs -all -clientopts -setvnclegacy -vnclegacy yes -setvncpw $VNC_PASSWORD -vncpw $VNC_PASSWORD
 
           echo "==========================================================="
           echo "✅ CONEXIÓN GRÁFICA LISTA"
@@ -66,15 +63,8 @@ jobs:
           echo "Contraseña VNC: password"
           echo "==========================================================="
 
-      # 3. Instalación de RustDesk
-      - name: 📦 Instalar RustDesk (Opcional)
-        run: |
-          echo "--- 3. Instalando RustDesk vía Homebrew Cask ---"
-          brew install --cask rustdesk
-          echo "RustDesk instalado en /Applications/RustDesk.app"
-
-      # 4. Mantener el flujo de trabajo activo
+      # 3. Mantener el flujo de trabajo activo
       - name: ⏳ Mantener el Runner Vivo para Acceso Remoto
         run: |
-          echo "--- 4. Manteniendo la Sesión Abierta (Máx 360 minutos) ---"
+          echo "--- 3. Manteniendo la Sesión Abierta (Máx 360 minutos) ---"
           sleep 21600
