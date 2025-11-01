@@ -11,22 +11,23 @@ jobs:
     
     steps:
       
-      - name: 🚀 1. Instalación y Autenticación de Tailscale (CORREGIDO)
+      - name: 🚀 1. Instalación y Autenticación de Tailscale (MSI Estable)
         env:
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
           Write-Host "--- 1. Tailscale Setup ---"
           
-          # Usamos la descarga del .exe para más estabilidad
-          $InstallerURL = "https://pkgs.tailscale.com/stable/tailscale-setup.exe"
-          $InstallerPath = "C:\Users\runneradmin\tailscale-setup.exe"
+          # Usamos la descarga del MSI para mayor compatibilidad con msiexec
+          $InstallerURL = "https://pkgs.tailscale.com/stable/tailscale-setup-latest.msi"
+          $InstallerPath = "C:\Users\runneradmin\tailscale-setup.msi"
           
-          Write-Host "Descargando Tailscale desde URL estable..."
-          Invoke-WebRequest -Uri $InstallerURL -OutFile $InstallerPath
+          Write-Host "Descargando Tailscale MSI..."
+          # Usamos curl para la descarga, que a veces es más robusto que Invoke-WebRequest en GitHub Actions
+          curl -L $InstallerURL -o $InstallerPath
           
-          # Instalación silenciosa (/S)
+          # Instalación silenciosa del MSI
           Write-Host "Instalando Tailscale silenciosamente..."
-          Start-Process -FilePath $InstallerPath -ArgumentList "/S" -Wait
+          Start-Process msiexec -ArgumentList "/i $InstallerPath /qn" -Wait
           
           # Autenticación de Tailscale
           $TailscalePath = "C:\Program Files\Tailscale\tailscale.exe"
@@ -41,7 +42,8 @@ jobs:
           $InstallerURL = "https://dl.google.com/dl/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
           $OutputPath = "C:\Users\runneradmin\chromeremotedesktophost.msi"
           
-          Invoke-WebRequest -Uri $InstallerURL -OutFile $OutputPath
+          # Descarga con curl para mayor estabilidad
+          curl -L $InstallerURL -o $OutputPath
           
           # Instalación silenciosa del MSI
           Write-Host "Instalando Host de CRD..."
@@ -59,7 +61,7 @@ jobs:
         run: |
           Write-Host "--- 3. Configurando CRD con código OAuth ---"
 
-          # Usamos la ruta corregida que debería existir después de la instalación del MSI
+          # Rutas probadas para CRD en entornos de 64 bits (Program Files x86)
           $CRD_HOST_PATH = "C:\Program Files (x86)\Google\Chrome Remote Desktop\remoting_host.exe"
           $CRD_CLI_PATH = "C:\Program Files (x86)\Google\Chrome Remote Desktop\host_service_cli.exe"
           
