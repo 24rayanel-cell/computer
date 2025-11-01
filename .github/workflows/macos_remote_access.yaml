@@ -11,26 +11,35 @@ jobs:
     
     steps:
       
-      - name: 🚀 1. Instalación y Autenticación de Tailscale (MSI Estable)
+      - name: 🚀 1. Instalación y Autenticación de Tailscale (REFORZADO Y DINÁMICO)
         env:
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
           Write-Host "--- 1. Tailscale Setup ---"
           
-          # Usamos la descarga del MSI para mayor compatibilidad con msiexec
+          # URL del MSI estable para Windows
           $InstallerURL = "https://pkgs.tailscale.com/stable/tailscale-setup-latest.msi"
           $InstallerPath = "C:\Users\runneradmin\tailscale-setup.msi"
           
-          Write-Host "Descargando Tailscale MSI..."
-          # Usamos curl para la descarga, que a veces es más robusto que Invoke-WebRequest en GitHub Actions
-          curl -L $InstallerURL -o $InstallerPath
+          Write-Host "Descargando Tailscale MSI con Invoke-WebRequest reforzado..."
+          # Reforzamos el protocolo de seguridad para evitar fallos de descarga
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          Invoke-WebRequest -Uri $InstallerURL -OutFile $InstallerPath -MaximumRedirection 5
           
           # Instalación silenciosa del MSI
           Write-Host "Instalando Tailscale silenciosamente..."
           Start-Process msiexec -ArgumentList "/i $InstallerPath /qn" -Wait
           
-          # Autenticación de Tailscale
-          $TailscalePath = "C:\Program Files\Tailscale\tailscale.exe"
+          # 🚨 Búsqueda dinámica de la ruta de tailscale.exe
+          $TailscalePath = Get-ChildItem -Path "C:\Program Files*" -Recurse -Include "tailscale.exe" | Select-Object -ExpandProperty FullName -First 1
+          
+          if (-not $TailscalePath) {
+              Write-Host "::error::ERROR: No se encontró tailscale.exe después de la instalación. Fallo en la instalación del MSI."
+              exit 1
+          }
+          Write-Host "Ruta de Tailscale encontrada: $TailscalePath"
+          
+          # Autenticación de Tailscale usando la ruta encontrada
           & $TailscalePath install-service
           & $TailscalePath up --authkey=$env:TAILSCALE_AUTHKEY --hostname="github-runner-crd" --accept-dns=false
           
@@ -42,8 +51,9 @@ jobs:
           $InstallerURL = "https://dl.google.com/dl/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
           $OutputPath = "C:\Users\runneradmin\chromeremotedesktophost.msi"
           
-          # Descarga con curl para mayor estabilidad
-          curl -L $InstallerURL -o $OutputPath
+          # Descarga reforzada con Invoke-WebRequest
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          Invoke-WebRequest -Uri $InstallerURL -OutFile $OutputPath -MaximumRedirection 5
           
           # Instalación silenciosa del MSI
           Write-Host "Instalando Host de CRD..."
@@ -61,10 +71,16 @@ jobs:
         run: |
           Write-Host "--- 3. Configurando CRD con código OAuth ---"
 
-          # Rutas probadas para CRD en entornos de 64 bits (Program Files x86)
-          $CRD_HOST_PATH = "C:\Program Files (x86)\Google\Chrome Remote Desktop\remoting_host.exe"
-          $CRD_CLI_PATH = "C:\Program Files (x86)\Google\Chrome Remote Desktop\host_service_cli.exe"
-          
+          # Búsqueda dinámica de la ruta de remoting_host.exe
+          $CRD_HOST_PATH = Get-ChildItem -Path "C:\Program Files*" -Recurse -Include "remoting_host.exe" | Select-Object -ExpandProperty FullName -First 1
+          $CRD_CLI_PATH = Get-ChildItem -Path "C:\Program Files*" -Recurse -Include "host_service_cli.exe" | Select-Object -ExpandProperty FullName -First 1
+
+          if (-not $CRD_HOST_PATH -or -not $CRD_CLI_PATH) {
+              Write-Host "::error::ERROR: No se encontró uno o ambos ejecutables de CRD después de la instalación."
+              exit 1
+          }
+          Write-Host "Ruta de CRD Host encontrada: $CRD_HOST_PATH"
+
           # 1. Configurar el Host con el código de autenticación
           & $CRD_HOST_PATH --code="$env:CRD_AUTH_CODE" `
               --redirect-url="$env:CRD_REDIRECT_URL" `
