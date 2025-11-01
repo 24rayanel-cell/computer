@@ -1,83 +1,50 @@
-name: macOS - Tailscale & SSH (Acceso Fijo - Contraseña Forzada)
+ame: Windows - Chrome Remote Desktop (CRD)
 
 on:
   workflow_dispatch:
 
 jobs:
-  remote_session:
-    name: Iniciar Sesión Remota (Máx 6 Horas)
-    runs-on: macos-latest
-    timeout-minutes: 360
-
+  remote_session_crd:
+    name: Iniciar Sesión Remota CRD (Máx 9999 minutos)
+    runs-on: windows-latest
+    timeout-minutes: 9999
+    
     steps:
-      # 1. Instalar y Autenticar Tailscale
-      - name: 🚀 Instalar y Autenticar Tailscale
-        env:
-          TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+      - name: 💾 Descargar e Instalar Chrome Remote Desktop Host
+        # Este paso descarga el MSI del host de CRD para permitir la conexión desatendida.
         run: |
-          echo "--- 1. Tailscale Setup ---"
-          brew install tailscale
-          sudo tailscaled &
-          sleep 5
-
-          if [ -z "$TAILSCALE_AUTHKEY" ]; then
-            echo "::error::ERROR: La clave TAILSCALE_AUTHKEY está vacía o no configurada."
-            exit 1 
-          else
-            HOSTNAME="github-mac-runner-$(uuidgen | head -c 8)"
-            sudo tailscale up --authkey=$TAILSCALE_AUTHKEY --hostname=$HOSTNAME --accept-dns=false
-            TS_IP=$(tailscale status | grep $HOSTNAME | grep -v 'offline' | awk '{print $1}')
-            echo "TS_IP=$TS_IP" >> $GITHUB_ENV
-            echo "--- IP del Runner Activo: $TS_IP ---"
-          fi
-
-      # 2. Configurar el Entorno Gráfico y Contraseña SSH
-      - name: 🖥️ Configurar Entorno Gráfico y Forzar Contraseña SSH
-        run: |
-          echo "--- 2. Instalando Dependencias Gráficas ---"
-          # Instalar 'expect' para forzar la contraseña
-          brew install expect
-          brew install --cask xquartz
-          brew install flux
+          $InstallerURL = "https://dl.google.com/dl/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
+          $OutputPath = "C:\Users\runneradmin\chromeremotedesktophost.msi"
+          Write-Host "Descargando Chrome Remote Desktop Host desde $InstallerURL"
           
-          SSH_PASSWORD="runnerpass"
-          RUNNER_USER="runner"
-          KICKSTART_PATH="/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart"
+          # Descargar el instalador
+          Invoke-WebRequest -Uri $InstallerURL -OutFile $OutputPath
+          
+          # Instalación silenciosa del MSI
+          Write-Host "Instalando silenciosamente el Host de CRD..."
+          Start-Process msiexec -ArgumentList "/i $OutputPath /qn" -Wait
+          Write-Host "Instalación completada."
 
-          # 2.2. A. Asegurar que el shell del usuario 'runner' sea válido
-          echo "--- 2.2. A. Asegurar shell Bash para 'runner' ---"
-          sudo dscl . -change /Users/$RUNNER_USER UserShell /bin/false /bin/bash
-
-          # 2.2. B. Forzar la nueva contraseña usando 'expect'
-          echo "--- 2.2. B. Forzar Contraseña SSH a: $SSH_PASSWORD ---"
-          # Usamos un script 'expect' para simular la entrada del comando 'passwd' y forzar el cambio.
-          /usr/bin/expect <<EOD
-            set timeout 10
-            spawn sudo passwd $RUNNER_USER
-            expect "Changing password for $RUNNER_USER."
-            expect "New password:"
-            send "$SSH_PASSWORD\r"
-            expect "Retype new password:"
-            send "$SSH_PASSWORD\r"
-            expect eof
-          EOD
-
-          # 2.3. Habilitar SSH y VNC (como respaldo)
-          echo "--- 2.3. Habilitar SSH y VNC ---"
-          sudo systemsetup -setremotelogin on
-          sudo defaults write /var/db/launchd.db/com.apple.launchd/overrides.plist com.apple.screensharing -dict Disabled -bool false
-          sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist
-          sudo $KICKSTART_PATH -activate -configure -access -on -privs -all -restart -agent
-
-          echo "==========================================================="
-          echo "✅ SSH LISTO PARA LOGIN"
-          echo "Dirección SSH/Tailscale: ${{ env.TS_IP }}"
-          echo "Usuario: $RUNNER_USER"
-          echo "Contraseña SSH: $SSH_PASSWORD"
-          echo "==========================================================="
-
-      # 3. Mantener el flujo de trabajo activo
-      - name: ⏳ Mantener el Runner Vivo para Acceso Remoto
+      - name: 🔑 Configurar y Ejecutar Servicio de CRD (¡Atención al Comando!)
+        # Este paso DEBE contener tu comando único de autenticación de Google.
         run: |
-          echo "--- 3. Manteniendo la Sesión Abierta (Máx 360 minutos) ---"
-          sleep 21600
+          # =========================================================================================
+          # PASO FUNDAMENTAL: OBTENER EL COMANDO DE CONFIGURACIÓN
+          # 1. Ve a https://remotedesktop.google.com/access
+          # 2. Haz clic en el botón AZUL "Activar" bajo "Configurar acceso remoto".
+          # 3. La web te dará un comando de PowerShell para configurar el servicio.
+          # 4. ¡PEGA ESE COMANDO DE POWERSHELL EN LA LÍNEA DE ABAJO!
+          # =========================================================================================
+          
+          # ELIMINA LA LÍNEA DE EJEMPLO DE ABAJO Y REEMPLAZA CON TU COMANDO REAL
+          # Ejemplo de lo que se vería, PERO NO USES ESTO:
+          # C:\Program Files\Google\Chrome Remote Desktop\remoting_host.exe --host-name="GitHub-Runner-1" --pin="123456" --oauth-client-id="..." --oauth-secret="..." --auto-start
+          
+          # [TU COMANDO DE CONFIGURACIÓN GENERADO AQUÍ]
+          
+          Write-Host "El servicio de CRD está configurado y se está iniciando. Debería aparecer en la web de CRD pronto."
+
+      - name: ⏳ Mantener el Runner Vivo
+        run: |
+          Write-Host "Manteniendo el runner vivo por la duración máxima..."
+          Start-Sleep -Seconds 999999
