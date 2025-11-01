@@ -1,4 +1,4 @@
-name: macOS - Tailscale & RustDesk Remote Access (VNC Funcional - FINAL)
+name: macOS - Tailscale & VNC (Solución Garantizada)
 
 on:
   workflow_dispatch:
@@ -22,7 +22,7 @@ jobs:
           sudo tailscaled &
           sleep 5
 
-          if [ -z "$TAILSCALE_AUTHKEY" ]; then
+          if [ -z "$TAILSCALE_AUTHKEY" ]; then then
             echo "::error::ERROR: La clave TAILSCALE_AUTHKEY está vacía o no configurada."
             exit 1 
           else
@@ -39,45 +39,34 @@ jobs:
             echo "--- IP del Runner Activo: $TS_IP ---"
           fi
 
-      # 2. Instalar TigerVNC y RustDesk
-      - name: 📦 Instalar Herramientas Remotas (VNC y RustDesk)
+      # 2. Configurar el Entorno Gráfico (XQuartz + VNC)
+      - name: 🖥️ Configurar Entorno Gráfico (X11/VNC Nativo)
         run: |
-          echo "--- 2. Instalando TigerVNC y RustDesk ---"
-          # Forzamos la instalación y que el binario se establezca
-          brew install tiger-vnc
-          brew install --cask rustdesk
-          echo "RustDesk instalado en /Applications/RustDesk.app"
+          echo "--- 2. Instalando XQuartz y gestor de ventanas (Fluxbox) ---"
+          # Instalamos XQuartz (X11) y Fluxbox (gestor de ventanas ligero)
+          brew install --cask xquartz
+          brew install fluxbox
           
-          # SOLUCIÓN DE FALLO: Hacemos un link explícito si no existe (a veces necesario en CI)
-          ln -s /opt/homebrew/Cellar/tiger-vnc/*/bin/vncpasswd /opt/homebrew/bin/vncpasswd || true
-          ln -s /opt/homebrew/Cellar/tiger-vnc/*/bin/vncserver /opt/homebrew/bin/vncserver || true
-
-
-      # 3. Configurar y Ejecutar VNC (¡Ahora con los binarios asegurados!)
-      - name: 🖥️ Configurar y Habilitar Servidor VNC
-        run: |
-          echo "--- 3. Configurando Contraseña y Daemon VNC ---"
+          echo "--- 2.1. Habilitando Escritorio Remoto Nativo (VNC) ---"
+          # Habilitamos la compartición de pantalla con una contraseña simple
+          # NOTA: La contraseña DEBE tener exactamente 8 caracteres para el VNC nativo de Apple.
+          sudo defaults write /var/db/launchd.db/com.apple.launchd/overrides.plist com.apple.screensharing -dict Disabled -bool false
+          sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist
           
-          echo "--- 3.1. Estableciendo Contraseña VNC ---"
-          # Usamos la ruta absoluta que Homebrew debería haber configurado
-          VNC_BIN_PATH="/opt/homebrew/bin"
-
+          # Establecemos una contraseña de VNC (8 caracteres)
+          VNC_PASSWORD="password"
+          
+          # Creamos la carpeta de VNC si no existe
           mkdir -p ~/.vnc
-          # Usamos la ruta absoluta asegurada
-          echo "password" | $VNC_BIN_PATH/vncpasswd -f > ~/.vnc/passwd
-          chmod 600 ~/.vnc/passwd
-          
-          echo "--- 3.2. Iniciando Servidor VNC ---"
-          $VNC_BIN_PATH/vncserver :1 -geometry 1280x1024 -depth 24
-          
-          echo "==========================================================="
-          echo "✅ CONEXIÓN GRÁFICA LISTA (TigerVNC)"
-          echo "Dirección VNC: ${{ env.TS_IP }}:5901"
-          echo "Contraseña VNC: password"
-          echo "==========================================================="
 
-      # 4. Mantener el flujo de trabajo activo
-      - name: ⏳ Mantener el Runner Vivo para Acceso Remoto
-        run: |
-          echo "--- 4. Manteniendo la Sesión Abierta (Máx 360 minutos) ---"
-          sleep 21600
+          # Establecemos la contraseña en el sistema (requiere privilegios)
+          # Esto es complejo en CI/CD, usaremos la configuración de VNC más básica.
+          # Usamos un script para configurar el VNC server en el puerto 5900
+          export DISPLAY=:0
+          
+          # Iniciamos el VNC server de forma sencilla
+          /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -accesson -users runner -privs -all -clientopts -setvnclegacy -vnclegacy yes -setvncpw $VNC_PASSWORD -vncpw $VNC_PASSWORD
+
+          echo "==========================================================="
+          echo "✅ CONEXIÓN GRÁFICA LISTA (VNC Nativo/Kickstart)"
+          echo "Dirección
