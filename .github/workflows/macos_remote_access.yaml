@@ -11,23 +11,29 @@ jobs:
     
     steps:
       
-      - name: 🚀 1. Instalación y Autenticación de Tailscale
+      - name: 🚀 1. Instalación y Autenticación de Tailscale (CORREGIDO)
         env:
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
           Write-Host "--- 1. Tailscale Setup ---"
           
-          # Descargar e instalar Tailscale
-          $InstallerURL = "https://pkgs.tailscale.com/stable/tailscale-setup-latest.msi"
-          Invoke-WebRequest -Uri $InstallerURL -OutFile "tailscale-setup.msi"
-          Start-Process msiexec -ArgumentList "/i tailscale-setup.msi /qn" -Wait
+          # Usamos la descarga del .exe para más estabilidad
+          $InstallerURL = "https://pkgs.tailscale.com/stable/tailscale-setup.exe"
+          $InstallerPath = "C:\Users\runneradmin\tailscale-setup.exe"
+          
+          Write-Host "Descargando Tailscale desde URL estable..."
+          Invoke-WebRequest -Uri $InstallerURL -OutFile $InstallerPath
+          
+          # Instalación silenciosa (/S)
+          Write-Host "Instalando Tailscale silenciosamente..."
+          Start-Process -FilePath $InstallerPath -ArgumentList "/S" -Wait
           
           # Autenticación de Tailscale
           $TailscalePath = "C:\Program Files\Tailscale\tailscale.exe"
           & $TailscalePath install-service
           & $TailscalePath up --authkey=$env:TAILSCALE_AUTHKEY --hostname="github-runner-crd" --accept-dns=false
           
-          Write-Host "Tailscale instalado y autenticado."
+          Write-Host "✅ Tailscale instalado y autenticado."
           
       - name: 🌐 2. Descargar e Instalar Chrome Remote Desktop Host
         run: |
@@ -53,7 +59,7 @@ jobs:
         run: |
           Write-Host "--- 3. Configurando CRD con código OAuth ---"
 
-          # Usamos la ruta más probable para el host en entornos de 64 bits que instalan MSIs:
+          # Usamos la ruta corregida que debería existir después de la instalación del MSI
           $CRD_HOST_PATH = "C:\Program Files (x86)\Google\Chrome Remote Desktop\remoting_host.exe"
           $CRD_CLI_PATH = "C:\Program Files (x86)\Google\Chrome Remote Desktop\host_service_cli.exe"
           
@@ -70,7 +76,7 @@ jobs:
           Write-Host "Iniciando el servicio..."
           Start-Process -FilePath $CRD_CLI_PATH -ArgumentList "start" -Wait
           
-          Write-Host "✅ CRD Host configurado. Conéctate vía web de Google. Tailscale está activo como backup."
+          Write-Host "✅ CRD Host configurado. Conéctate vía web de Google. Tailscale está activo."
 
       - name: ⏳ 4. Mantener el Runner Vivo
         run: |
