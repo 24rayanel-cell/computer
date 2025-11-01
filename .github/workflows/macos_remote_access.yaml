@@ -1,4 +1,4 @@
-name: macOS - Tailscale & VNC (Acceso Gráfico con Contraseña Fija)
+name: macOS - Tailscale & SSH (Acceso Fijo - Contraseña Forzada)
 
 on:
   workflow_dispatch:
@@ -31,30 +31,48 @@ jobs:
             echo "--- IP del Runner Activo: $TS_IP ---"
           fi
 
-      # 2. Configurar el Entorno Gráfico (VNC Nativo)
-      - name: 🖥️ Configurar Entorno Gráfico y Contraseña SSH
+      # 2. Configurar el Entorno Gráfico y Contraseña SSH
+      - name: 🖥️ Configurar Entorno Gráfico y Forzar Contraseña SSH
         run: |
-          echo "--- 2. Instalando XQuartz y gestor de ventanas ---"
+          echo "--- 2. Instalando Dependencias Gráficas ---"
+          # Instalar 'expect' para forzar la contraseña
+          brew install expect
           brew install --cask xquartz
           brew install flux
           
-          # 2.2. Establecer Contraseña SSH
-          # Establecemos una contraseña conocida para el usuario 'runner'
           SSH_PASSWORD="runnerpass"
-          echo "--- 2.2. Establecer Contraseña SSH: $SSH_PASSWORD ---"
-          sudo dscl . -passwd /Users/runner $SSH_PASSWORD
-          
-          echo "--- 2.3. Habilitando Escritorio Remoto Nativo (VNC) ---"
-          # Comando para activar el servicio VNC (aunque no lo usaremos, es buena práctica)
+          RUNNER_USER="runner"
           KICKSTART_PATH="/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart"
+
+          # 2.2. A. Asegurar que el shell del usuario 'runner' sea válido
+          echo "--- 2.2. A. Asegurar shell Bash para 'runner' ---"
+          sudo dscl . -change /Users/$RUNNER_USER UserShell /bin/false /bin/bash
+
+          # 2.2. B. Forzar la nueva contraseña usando 'expect'
+          echo "--- 2.2. B. Forzar Contraseña SSH a: $SSH_PASSWORD ---"
+          # Usamos un script 'expect' para simular la entrada del comando 'passwd' y forzar el cambio.
+          /usr/bin/expect <<EOD
+            set timeout 10
+            spawn sudo passwd $RUNNER_USER
+            expect "Changing password for $RUNNER_USER."
+            expect "New password:"
+            send "$SSH_PASSWORD\r"
+            expect "Retype new password:"
+            send "$SSH_PASSWORD\r"
+            expect eof
+          EOD
+
+          # 2.3. Habilitar SSH y VNC (como respaldo)
+          echo "--- 2.3. Habilitar SSH y VNC ---"
+          sudo systemsetup -setremotelogin on
           sudo defaults write /var/db/launchd.db/com.apple.launchd/overrides.plist com.apple.screensharing -dict Disabled -bool false
           sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist
           sudo $KICKSTART_PATH -activate -configure -access -on -privs -all -restart -agent
 
           echo "==========================================================="
-          echo "✅ SSH LISTO CON CONTRASEÑA CONOCIDA"
+          echo "✅ SSH LISTO PARA LOGIN"
           echo "Dirección SSH/Tailscale: ${{ env.TS_IP }}"
-          echo "Usuario: runner"
+          echo "Usuario: $RUNNER_USER"
           echo "Contraseña SSH: $SSH_PASSWORD"
           echo "==========================================================="
 
