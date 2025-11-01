@@ -1,105 +1,113 @@
-name: Windows - CRD y Tailscale (Acceso por Google)
+name: RDP
 
 on:
   workflow_dispatch:
 
 jobs:
-  remote_session_crd_ts:
-    name: Iniciar Sesión Remota (Máx 9999 minutos)
+  secure-rdp:
     runs-on: windows-latest
-    timeout-minutes: 9999
-    
+    timeout-minutes: 3600
+
     steps:
+      - name: Configure Core RDP Settings
+        run: |
+          # Enable Remote Desktop and disable Network Level Authentication (if needed)
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
+                             -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
+                             -Name "UserAuthentication" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
+                             -Name "SecurityLayer" -Value 0 -Force
+
+          # Remove any existing rule with the same name to avoid duplication
+          netsh advfirewall firewall delete rule name="RDP-Tailscale"
+          
+          # For testing, allow any incoming connection on port 3389
+          netsh advfirewall firewall add rule name="RDP-Tailscale" `
+            dir=in action=allow protocol=TCP localport=3389
+
+          # (Optional) Restart the Remote Desktop service to ensure changes take effect
+          Restart-Service -Name TermService -Force
+
+      - name: Create RDP User with Secure Password
+        run: |
+          Add-Type -AssemblyName System.Security
+          $charSet = @{
+              Upper   = [char[]](65..90)      # A-Z
+              Lower   = [char[]](97..122)     # a-z
+              Number  = [char[]](48..57)      # 0-9
+              Special = ([char[]](33..47) + [char[]](58..64) +
+                         [char[]](91..96) + [char[]](123..126)) # Special characters
+          }
+          $rawPassword = @()
+          $rawPassword += $charSet.Upper | Get-Random -Count 4
+          $rawPassword += $charSet.Lower | Get-Random -Count 4
+          $rawPassword += $charSet.Number | Get-Random -Count 4
+          $rawPassword += $charSet.Special | Get-Random -Count 4
+          $password = -join ($rawPassword | Sort-Object { Get-Random })
+          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
+          New-LocalUser -Name "RDP" -Password $securePass -AccountNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member "RDP"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
+          
+          echo "RDP_CREDS=User: RDP | Password: $password" >> $env:GITHUB_ENV
+          
+          if (-not (Get-LocalUser -Name "RDP")) {
+              Write-Error "User creation failed"
+              exit 1
+          }
+
+      - name: Install Tailscale
+        run: |
+          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $installerPath = "$env:TEMP\tailscale.msi"
+          
+          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
+          Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
+          Remove-Item $installerPath -Force
+
+      - name: Establish Tailscale Connection
+        run: |
+          # Bring up Tailscale with the provided auth key and set a unique hostname
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
+          
+          # Wait for Tailscale to assign an IP
+          $tsIP = $null
+          $retries = 0
+          while (-not $tsIP -and $retries -lt 10) {
+              $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+              Start-Sleep -Seconds 5
+              $retries++
+          }
+          
+          if (-not $tsIP) {
+              Write-Error "Tailscale IP not assigned. Exiting."
+              exit 1
+          }
+          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
       
-      - name: 🚀 1. Instalación y Autenticación de Tailscale (REFORZADO Y DINÁMICO)
-        env:
-          TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+      - name: Verify RDP Accessibility
         run: |
-          Write-Host "--- 1. Tailscale Setup ---"
+          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
           
-          # URL del MSI estable para Windows
-          $InstallerURL = "https://pkgs.tailscale.com/stable/tailscale-setup-latest.msi"
-          $InstallerPath = "C:\Users\runneradmin\tailscale-setup.msi"
-          
-          Write-Host "Descargando Tailscale MSI con .NET WebClient (Método Definitivo)..."
-          # 💡 FIX: Usamos System.Net.WebClient para evitar fallos de Invoke-WebRequest
-          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          $webclient = New-Object System.Net.WebClient
-          $webclient.DownloadFile($InstallerURL, $InstallerPath)
-          
-          # Instalación silenciosa del MSI
-          Write-Host "Instalando Tailscale silenciosamente..."
-          Start-Process msiexec -ArgumentList "/i $InstallerPath /qn" -Wait
-          
-          # 🚨 Búsqueda dinámica de la ruta de tailscale.exe
-          $TailscalePath = Get-ChildItem -Path "C:\Program Files*" -Recurse -Include "tailscale.exe" | Select-Object -ExpandProperty FullName -First 1
-          
-          if (-not $TailscalePath) {
-              Write-Host "::error::ERROR: No se encontró tailscale.exe después de la instalación. Fallo en la instalación del MSI."
+          # Test connectivity using Test-NetConnection against the Tailscale IP on port 3389
+          $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
+          if (-not $testResult.TcpTestSucceeded) {
+              Write-Error "TCP connection to RDP port 3389 failed"
               exit 1
           }
-          Write-Host "Ruta de Tailscale encontrada: $TailscalePath"
-          
-          # Autenticación de Tailscale usando la ruta encontrada
-          & $TailscalePath install-service
-          & $TailscalePath up --authkey=$env:TAILSCALE_AUTHKEY --hostname="github-runner-crd" --accept-dns=false
-          
-          Write-Host "✅ Tailscale instalado y autenticado."
-          
-      - name: 🌐 2. Descargar e Instalar Chrome Remote Desktop Host
+          Write-Host "TCP connectivity successful!"
+
+      - name: Maintain Connection
         run: |
-          Write-Host "--- 2. Instalando CRD Host ---"
-          $InstallerURL = "https://dl.google.com/dl/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
-          $OutputPath = "C:\Users\runneradmin\chromeremotedesktophost.msi"
+          Write-Host "`n=== RDP ACCESS ==="
+          Write-Host "Address: $env:TAILSCALE_IP"
+          Write-Host "Username: RDP"
+          Write-Host "Password: $(echo $env:RDP_CREDS)"
+          Write-Host "==================`n"
           
-          Write-Host "Descargando CRD Host con .NET WebClient..."
-          # 💡 FIX: Usamos System.Net.WebClient para la descarga del MSI de CRD
-          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          $webclient = New-Object System.Net.WebClient
-          $webclient.DownloadFile($InstallerURL, $OutputPath)
-          
-          # Instalación silenciosa del MSI
-          Write-Host "Instalando Host de CRD..."
-          Start-Process msiexec -ArgumentList "/i $OutputPath /qn" -Wait
-          Write-Host "Instalación de CRD Host completada."
-
-      - name: 🔑 3. Configurar y Ejecutar Servicio de CRD (CÓDIGO ÚNICO)
-        env:
-          # 🚨 ¡REEMPLAZA ESTE CÓDIGO CON UNO NUEVO Y RECIÉN GENERADO!
-          CRD_AUTH_CODE: "4/0Ab32j91SMKCxGVyOT2gHvDoL7nXDuhVm-fj0eTuJXVyei7Z2-DmlNU8kxgfiZQJGjkpkqw" 
-          CRD_REDIRECT_URL: "https://remotedesktop.google.com/_/oauthredirect"
-          CRD_HOST_NAME: "GitHub-Runner-CRD-TS"
-          CRD_PIN: "123456" # PIN para acceder
-          
-        run: |
-          Write-Host "--- 3. Configurando CRD con código OAuth ---"
-
-          # Búsqueda dinámica de la ruta de remoting_host.exe
-          $CRD_HOST_PATH = Get-ChildItem -Path "C:\Program Files*" -Recurse -Include "remoting_host.exe" | Select-Object -ExpandProperty FullName -First 1
-          $CRD_CLI_PATH = Get-ChildItem -Path "C:\Program Files*" -Recurse -Include "host_service_cli.exe" | Select-Object -ExpandProperty FullName -First 1
-
-          if (-not $CRD_HOST_PATH -or -not $CRD_CLI_PATH) {
-              Write-Host "::error::ERROR: No se encontró uno o ambos ejecutables de CRD después de la instalación."
-              exit 1
+          # Keep runner active indefinitely (or until manually cancelled)
+          while ($true) {
+              Write-Host "[$(Get-Date)] RDP Active - Use Ctrl+C in workflow to terminate"
+              Start-Sleep -Seconds 300
           }
-          Write-Host "Ruta de CRD Host encontrada: $CRD_HOST_PATH"
-
-          # 1. Configurar el Host con el código de autenticación
-          & $CRD_HOST_PATH --code="$env:CRD_AUTH_CODE" `
-              --redirect-url="$env:CRD_REDIRECT_URL" `
-              --host-name="$env:CRD_HOST_NAME" `
-              --pin="$env:CRD_PIN" `
-              --host-client-id="40693247926.apps.googleusercontent.com" `
-              --host-secret="V0RjYjVwTEdmYlQzY3pBcU40b2Y5Q1g=" `
-              --no-start
-
-          # 2. Iniciar el servicio (usa la CLI para asegurar el inicio)
-          Write-Host "Iniciando el servicio..."
-          Start-Process -FilePath $CRD_CLI_PATH -ArgumentList "start" -Wait
-          
-          Write-Host "✅ CRD Host configurado. Conéctate vía web de Google. Tailscale está activo."
-
-      - name: ⏳ 4. Mantener el Runner Vivo
-        run: |
-          Write-Host "--- 4. Manteniendo la Sesión Abierta (Máx 9999 minutos) ---"
-          Start-Sleep -Seconds 9999999
