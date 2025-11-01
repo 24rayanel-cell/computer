@@ -15,25 +15,31 @@ jobs:
       # 1. Configurar e Instalar Tailscale
       - name: 🚀 Instalar y Configurar Tailscale
         env:
-          # Se usa el secreto que ya has configurado
+          # Se usa el secreto que ya has configurado (TAILSCALE_AUTHKEY)
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
           echo "--- 1. Instalando Tailscale ---"
           # Instalar Tailscale usando Homebrew
           brew install tailscale
+          
+          echo "--- 1.1. Iniciando el servicio Tailscale (daemon) ---"
+          # CORRECCIÓN CLAVE: Iniciar el daemon en segundo plano para que 'tailscale up' funcione
+          sudo tailscaled &
+          # Damos un momento al daemon para inicializarse
+          sleep 5
 
           if [ -z "$TAILSCALE_AUTHKEY" ]; then
-            echo "::error::La clave TAILSCALE_AUTHKEY no está configurada. Tailscale no se autenticará."
-            exit 1
+            echo "::error::ERROR: La clave TAILSCALE_AUTHKEY está vacía o no configurada. Por favor, revisa tus secretos."
+            exit 1 
           else
-            # Iniciar Tailscale y autenticar
-            # Configura un hostname fácil de identificar
+            echo "--- 1.2. Autenticando Tailscale ---"
+            # Autenticar Tailscale usando la clave
             sudo tailscale up --authkey=$TAILSCALE_AUTHKEY --hostname=github-mac-runner --accept-dns=false
             echo "✅ Tailscale está corriendo. IP Address:"
             tailscale status
           fi
 
-      # 2. Instalar RustDesk (Opcional: puedes necesitar un VNC server)
+      # 2. Instalar RustDesk
       - name: 🖥️ Instalar RustDesk (Cask)
         run: |
           echo "--- 2. Instalando RustDesk vía Homebrew Cask ---"
@@ -46,5 +52,5 @@ jobs:
         run: |
           echo "--- 3. Manteniendo la Sesión Abierta (Máx 360 minutos) ---"
           # Este comando detiene la ejecución del flujo de trabajo por 6 horas (21600 segundos).
-          # El trabajo terminará automáticamente al alcanzar el límite de 'timeout-minutes'.
+          # El job terminará automáticamente cuando se agote el tiempo de timeout.
           sleep 21600
