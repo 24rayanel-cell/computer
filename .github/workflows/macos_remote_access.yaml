@@ -42,20 +42,20 @@ jobs:
           VNC_PASSWORD="password"
           KICKSTART_PATH="/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart"
           
-          # 2.2. Habilitar la compartición de pantalla
+          # Habilitar la compartición de pantalla a nivel de sistema
           sudo defaults write /var/db/launchd.db/com.apple.launchd/overrides.plist com.apple.screensharing -dict Disabled -bool false
           sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist
           
-          # CORRECCIÓN DE SINTAXIS: Usaremos el comando en un solo paso con la sintaxis probada y correcta.
-          # Esto: -setvncpw $VNC_PASSWORD -vncpw $VNC_PASSWORD causó el error "Extra arguments".
-          # Usaremos: -setvncpw $VNC_PASSWORD (más limpio) y garantizaremos la activación y el acceso.
-          echo "--- 2.3. Activar VNC, configurar contraseña y acceso ---"
-          sudo $KICKSTART_PATH -activate -configure -users runner -access -on -privs -all -clientopts -setvnclegacy -vnclegacy yes -setvncpw $VNC_PASSWORD -restart -agent
+          # ¡CORRECCIÓN FINAL! Sintaxis más simple para FORZAR la activación y el acceso de usuario.
+          # Eliminamos el argumento -vncpw $VNC_PASSWORD problemático y confiamos en la autenticación del usuario 'runner'.
+          echo "--- 2.3. Activar VNC y configurar acceso de usuario 'runner' ---"
+          sudo $KICKSTART_PATH -activate -configure -users runner -access -on -privs -all -restart -agent
 
           echo "==========================================================="
           echo "✅ CONEXIÓN GRÁFICA LISTA"
           echo "Dirección VNC: ${{ env.TS_IP }}:5900"
-          echo "Contraseña VNC: password"
+          echo "Usuario de macOS: runner"
+          echo "Contraseña VNC (puede estar vacía): password (inténtala si te lo pide)"
           echo "==========================================================="
 
       # 3. Mantener el flujo de trabajo activo
