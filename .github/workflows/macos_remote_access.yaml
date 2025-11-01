@@ -1,4 +1,4 @@
-name: macOS - Tailscale & RustDesk Remote Access (FINAL)
+name: macOS - Tailscale & RustDesk Remote Access (VNC Funcional)
 
 on:
   workflow_dispatch:
@@ -30,13 +30,11 @@ jobs:
             HOSTNAME="github-mac-runner-$(uuidgen | head -c 8)"
             sudo tailscale up --authkey=$TAILSCALE_AUTHKEY --hostname=$HOSTNAME --accept-dns=false
             
-            # Capturamos la IP del runner ACTIVO
             TS_IP=$(tailscale status | grep $HOSTNAME | grep -v 'offline' | awk '{print $1}')
             
             echo "✅ Tailscale está corriendo. IP Address:"
             tailscale status
             
-            # Guardamos la IP en una variable de entorno para el siguiente paso
             echo "TS_IP=$TS_IP" >> $GITHUB_ENV
             echo "--- IP del Runner Activo: $TS_IP ---"
           fi
@@ -49,18 +47,22 @@ jobs:
           brew install --cask rustdesk
           echo "RustDesk instalado en /Applications/RustDesk.app"
 
-      # 3. Configurar y Ejecutar VNC (Configuración y Ejecución)
+      # 3. Configurar y Ejecutar VNC (Configuración y Ejecución con ruta absoluta)
       - name: 🖥️ Configurar y Habilitar Servidor VNC
         run: |
           echo "--- 3. Configurando Contraseña y Daemon VNC ---"
-          # Configuramos la contraseña de VNC 'password'
+          # CORRECCIÓN DEFINITIVA: Usamos la ruta absoluta a los binarios de TigerVNC
+          TIGER_VNC_BIN="/opt/homebrew/bin"
+
+          echo "--- 3.1. Estableciendo Contraseña VNC ---"
           mkdir -p ~/.vnc
-          # NOTA: Usamos 'vncpasswd' sin la ruta completa, ya que en un nuevo paso, el PATH suele estar resuelto.
-          echo "password" | vncpasswd -f > ~/.vnc/passwd
+          # Usamos la ruta absoluta /opt/homebrew/bin/vncpasswd
+          echo "password" | $TIGER_VNC_BIN/vncpasswd -f > ~/.vnc/passwd
           chmod 600 ~/.vnc/passwd
           
-          # Iniciar el servidor VNC
-          vncserver :1 -geometry 1280x1024 -depth 24
+          echo "--- 3.2. Iniciando Servidor VNC ---"
+          # Usamos la ruta absoluta /opt/homebrew/bin/vncserver
+          $TIGER_VNC_BIN/vncserver :1 -geometry 1280x1024 -depth 24
           
           echo "==========================================================="
           echo "✅ CONEXIÓN GRÁFICA LISTA (TigerVNC)"
