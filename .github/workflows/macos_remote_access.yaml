@@ -22,7 +22,6 @@ jobs:
           sudo tailscaled &
           sleep 5
 
-          # CORRECCIÓN DE SINTAXIS
           if [ -z "$TAILSCALE_AUTHKEY" ]; then
             echo "::error::ERROR: La clave TAILSCALE_AUTHKEY está vacía o no configurada."
             exit 1 
@@ -40,22 +39,25 @@ jobs:
             echo "--- IP del Runner Activo: $TS_IP ---"
           fi
 
-      # 2. Configurar el Entorno Gráfico (XQuartz + VNC Nativo)
+      # 2. Configurar el Entorno Gráfico (VNC Nativo)
       - name: 🖥️ Configurar Entorno Gráfico (VNC Nativo)
         run: |
-          echo "--- 2. Instalando XQuartz y gestor de ventanas (Fluxbox) ---"
+          echo "--- 2. Instalando XQuartz (X11) ---"
           brew install --cask xquartz
-          brew install fluxbox
           
-          echo "--- 2.1. Habilitando Escritorio Remoto Nativo (VNC) ---"
+          # CORRECCIÓN DE FÓRMULA: Instalamos el paquete 'flux' (gestor de ventanas)
+          echo "--- 2.1. Instalando Gestor de Ventanas (flux) ---"
+          brew install flux
+          
+          echo "--- 2.2. Habilitando Escritorio Remoto Nativo (VNC) ---"
           # La contraseña debe ser de 8 caracteres
           VNC_PASSWORD="password"
           
-          # 2.2. Habilitar la compartición de pantalla
+          # Habilitar la compartición de pantalla
           sudo defaults write /var/db/launchd.db/com.apple.launchd/overrides.plist com.apple.screensharing -dict Disabled -bool false
           sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist
           
-          # 2.3. Ejecutar kickstart para configurar VNC con contraseña y privilegios
+          # Ejecutar kickstart para configurar VNC con contraseña y privilegios
           /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -accesson -users runner -privs -all -clientopts -setvnclegacy -vnclegacy yes -setvncpw $VNC_PASSWORD -vncpw $VNC_PASSWORD
 
           echo "==========================================================="
