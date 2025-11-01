@@ -1,4 +1,4 @@
-name: macOS - Tailscale & VNC (Acceso Gráfico Estable)
+name: macOS - Tailscale & VNC (Acceso Gráfico con Compatibilidad Forzada)
 
 on:
   workflow_dispatch:
@@ -42,20 +42,23 @@ jobs:
           VNC_PASSWORD="password"
           KICKSTART_PATH="/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart"
           
-          # Habilitar la compartición de pantalla a nivel de sistema
+          # Habilitar la compartición de pantalla
           sudo defaults write /var/db/launchd.db/com.apple.launchd/overrides.plist com.apple.screensharing -dict Disabled -bool false
           sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist
           
-          # ¡CORRECCIÓN FINAL! Sintaxis más simple para FORZAR la activación y el acceso de usuario.
-          # Eliminamos el argumento -vncpw $VNC_PASSWORD problemático y confiamos en la autenticación del usuario 'runner'.
-          echo "--- 2.3. Activar VNC y configurar acceso de usuario 'runner' ---"
-          sudo $KICKSTART_PATH -activate -configure -users runner -access -on -privs -all -restart -agent
+          # CORRECCIÓN FINAL Y DEFINITIVA: 
+          # 1. Usar -clientopts para garantizar la activación de VNC Legacy (metodo VNC Password).
+          # 2. Usar un solo comando para activar el servicio, establecer el acceso de usuario y configurar la seguridad.
+          echo "--- 2.3. Activar VNC, configurar contraseña VNC (Legacy) y acceso de usuario 'runner' ---"
+          sudo $KICKSTART_PATH -activate -configure \
+            -users runner -access -on -privs -all \
+            -clientopts -setvnclegacy -vnclegacy yes -setvncpw $VNC_PASSWORD -vncpw $VNC_PASSWORD \
+            -restart -agent
 
           echo "==========================================================="
           echo "✅ CONEXIÓN GRÁFICA LISTA"
           echo "Dirección VNC: ${{ env.TS_IP }}:5900"
-          echo "Usuario de macOS: runner"
-          echo "Contraseña VNC (puede estar vacía): password (inténtala si te lo pide)"
+          echo "Contraseña VNC (¡La usaremos ahora!): $VNC_PASSWORD"
           echo "==========================================================="
 
       # 3. Mantener el flujo de trabajo activo
