@@ -1,56 +1,62 @@
-name: macOS - Tailscale & RustDesk Remote Access
+name: macOS - Tailscale & RustDesk Remote Access (VNC Enabled)
 
 on:
-  # Permite ejecutar este flujo de trabajo manualmente desde la pestaña 'Actions'
   workflow_dispatch:
 
 jobs:
   remote_session:
     name: Iniciar Sesión Remota (Máx 6 Horas)
     runs-on: macos-latest
-    # Tiempo máximo de ejecución permitido por GitHub (360 minutos = 6 horas)
     timeout-minutes: 360
 
     steps:
       # 1. Configurar e Instalar Tailscale
       - name: 🚀 Instalar y Configurar Tailscale
         env:
-          # Se usa el secreto que ya has configurado (TAILSCALE_AUTHKEY)
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
           echo "--- 1. Instalando Tailscale ---"
-          # Instalar Tailscale usando Homebrew
           brew install tailscale
           
           echo "--- 1.1. Iniciando el servicio Tailscale (daemon) ---"
-          # CORRECCIÓN CLAVE: Iniciar el daemon en segundo plano para que 'tailscale up' funcione
           sudo tailscaled &
-          # Damos un momento al daemon para inicializarse
           sleep 5
 
           if [ -z "$TAILSCALE_AUTHKEY" ]; then
-            echo "::error::ERROR: La clave TAILSCALE_AUTHKEY está vacía o no configurada. Por favor, revisa tus secretos."
+            echo "::error::ERROR: La clave TAILSCALE_AUTHKEY está vacía o no configurada."
             exit 1 
           else
             echo "--- 1.2. Autenticando Tailscale ---"
-            # Autenticar Tailscale usando la clave
             sudo tailscale up --authkey=$TAILSCALE_AUTHKEY --hostname=github-mac-runner --accept-dns=false
             echo "✅ Tailscale está corriendo. IP Address:"
             tailscale status
           fi
 
-      # 2. Instalar RustDesk
-      - name: 🖥️ Instalar RustDesk (Cask)
+      # 2. Habilitar el Escritorio Remoto (VNC)
+      - name: 🖥️ Instalar y Habilitar VNC Server
         run: |
-          echo "--- 2. Instalando RustDesk vía Homebrew Cask ---"
-          # RustDesk se instala como una aplicación GUI (Cask)
+          echo "--- 2. Instalando un servidor VNC para acceso gráfico ---"
+          # Instalamos tightvnc (un popular servidor VNC)
+          brew install tightvnc
+
+          # Inicializar el servidor VNC en un entorno sin cabeza (headless)
+          vncserver :1 -geometry 1280x1024 -depth 24
+          
+          echo "==========================================================="
+          echo "✅ CONEXIÓN GRÁFICA LISTA (VNC)"
+          echo "Utiliza el siguiente link en tu cliente VNC (Recuerda que tu máquina local también debe estar en Tailscale):"
+          echo "Dirección VNC: 100.101.19.19:5901"
+          echo "==========================================================="
+
+      # 3. Instalación de RustDesk (Solo como un extra, el VNC es lo que necesitas)
+      - name: 📦 Instalar RustDesk (Opcional)
+        run: |
+          echo "--- 3. Instalando RustDesk vía Homebrew Cask ---"
           brew install --cask rustdesk
           echo "RustDesk instalado en /Applications/RustDesk.app"
 
-      # 3. Mantener el flujo de trabajo activo
+      # 4. Mantener el flujo de trabajo activo
       - name: ⏳ Mantener el Runner Vivo para Acceso Remoto
         run: |
-          echo "--- 3. Manteniendo la Sesión Abierta (Máx 360 minutos) ---"
-          # Este comando detiene la ejecución del flujo de trabajo por 6 horas (21600 segundos).
-          # El job terminará automáticamente cuando se agote el tiempo de timeout.
+          echo "--- 4. Manteniendo la Sesión Abierta (Máx 360 minutos) ---"
           sleep 21600
