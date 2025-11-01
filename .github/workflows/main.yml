@@ -1,63 +1,57 @@
-name: SSH Access (macOS + Tailscale)
+name: RustDesk Host (macOS)
 
 on:
   workflow_dispatch:
 
 jobs:
-  ssh-access:
+  rustdesk:
     runs-on: macos-latest
     timeout-minutes: 360
 
     steps:
-      - name: Install Tailscale
+      - name: Install RustDesk
         run: |
-          brew install --cask tailscale
+          brew install --cask rustdesk
 
-      - name: Start Tailscale daemon
+      - name: Prepare RustDesk environment
         run: |
-          # Arranca tailscaled en segundo plano
-          sudo tailscaled --tun=userspace-networking --state=/tmp/tailscaled.state &
-          echo "Tailscale daemon started"
-          sleep 5  # espera a que el daemon esté listo
+          mkdir -p ~/rustdesk
+          chmod 700 ~/rustdesk
 
-      - name: Authenticate and connect to Tailscale
-        env:
-          TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+      - name: Start RustDesk host and capture ID
         run: |
-          sudo tailscale up --authkey=${TAILSCALE_AUTH_KEY} --hostname=gh-macos-${GITHUB_RUN_ID}
-          echo "TAILSCALE_IP=$(tailscale ip -4)" >> $GITHUB_ENV
-          echo "Connected to Tailscale. IP: $(tailscale ip -4)"
-
-      - name: Create SSH user and key
-        run: |
-          USERNAME=macuser
-          # Crear usuario temporal
           PASSWORD=$(openssl rand -base64 12)
-          sudo sysadminctl -addUser $USERNAME -password $PASSWORD
-          sudo dscl . -append /Groups/admin GroupMembership $USERNAME
-          sudo systemsetup -setremotelogin on
-          
-          # Generar clave SSH temporal para el usuario
-          sudo -u $USERNAME ssh-keygen -t ed25519 -f /Users/$USERNAME/.ssh/id_ed25519 -N ""
-          echo "SSH_USER=$USERNAME" >> $GITHUB_ENV
-          echo "SSH_PASS=$PASSWORD" >> $GITHUB_ENV
-          echo "SSH_KEY_PATH=/Users/$USERNAME/.ssh/id_ed25519" >> $GITHUB_ENV
+          echo "RUSTDESK_PASS=$PASSWORD" >> $GITHUB_ENV
+
+          LOG_FILE=~/rustdesk/rustdesk.log
+          mkdir -p $(dirname $LOG_FILE)
+          touch $LOG_FILE
+
+          # Arrancar RustDesk en segundo plano con relay público
+          nohup /Applications/RustDesk.app/Contents/MacOS/rustdesk \
+            --password $PASSWORD \
+            --serve-id hbbs-public.hh.ru \
+            > $LOG_FILE 2>&1 &
+
+          # Esperar unos segundos a que genere el ID
+          sleep 10
+
+          # Capturar el ID desde los logs
+          RUSTDESK_ID=$(grep -oE 'Your RustDesk ID: [0-9 ]+' $LOG_FILE | head -n1 | awk -F': ' '{print $2}')
+          echo "RUSTDESK_ID=$RUSTDESK_ID" >> $GITHUB_ENV
 
       - name: Show connection details
         run: |
-          echo "==================== SSH ACCESS ===================="
-          echo "Tailscale IP: $TAILSCALE_IP"
-          echo "Username: $SSH_USER"
-          echo "Password: $SSH_PASS"
-          echo "Private key path: $SSH_KEY_PATH"
-          echo "Connect using:"
-          echo "ssh -i $SSH_KEY_PATH $SSH_USER@$TAILSCALE_IP"
-          echo "===================================================="
+          echo "==================== RUSTDESK ACCESS ===================="
+          echo "ID: $RUSTDESK_ID"
+          echo "Password: $RUSTDESK_PASS"
+          echo "Connect using RustDesk client with the above credentials."
+          echo "========================================================"
 
       - name: Keep runner alive
         run: |
-          echo "Keeping SSH session active..."
+          echo "Keeping RustDesk session active..."
           while true; do
-            echo "[$(date)] SSH still active via $TAILSCALE_IP"
+            echo "[$(date)] RustDesk host active (ID: $RUSTDESK_ID)"
             sleep 300
           done
