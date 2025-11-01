@@ -1,0 +1,51 @@
+name: SSH Access (macOS + Tailscale)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ssh-access:
+    runs-on: macos-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Install Tailscale
+        run: |
+          brew install --cask tailscale
+          sudo tailscaled &
+
+      - name: Authenticate and connect to Tailscale
+        env:
+          TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+        run: |
+          sudo tailscale up --authkey=${TAILSCALE_AUTH_KEY} --hostname=gh-macos-${GITHUB_RUN_ID}
+          echo "TAILSCALE_IP=$(tailscale ip -4)" >> $GITHUB_ENV
+
+      - name: Create SSH user
+        run: |
+          USERNAME=macuser
+          PASSWORD=$(openssl rand -base64 12)
+          sudo sysadminctl -addUser $USERNAME -password $PASSWORD
+          sudo dscl . -append /Groups/admin GroupMembership $USERNAME
+          echo "SSH_USER=$USERNAME" >> $GITHUB_ENV
+          echo "SSH_PASS=$PASSWORD" >> $GITHUB_ENV
+          sudo systemsetup -setremotelogin on
+          echo "User created: $USERNAME"
+          echo "Password: $PASSWORD"
+
+      - name: Show connection details
+        run: |
+          echo "==================== SSH ACCESS ===================="
+          echo "Tailscale IP: $TAILSCALE_IP"
+          echo "Username: $SSH_USER"
+          echo "Password: $SSH_PASS"
+          echo "Connect using: ssh $SSH_USER@$TAILSCALE_IP"
+          echo "===================================================="
+
+      - name: Keep alive
+        run: |
+          echo "Keeping SSH session active..."
+          while true; do
+            echo "[$(date)] SSH still active via $TAILSCALE_IP"
+            sleep 300
+          done
