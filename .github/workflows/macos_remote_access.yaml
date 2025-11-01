@@ -15,11 +15,8 @@ jobs:
         env:
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
-          echo "--- 1. Instalar y Autenticar Tailscale ---"
+          echo "--- 1. Tailscale Setup ---"
           brew install tailscale
-          
-          echo "--- 1.1. Iniciando el servicio Tailscale (daemon) ---"
-          # Inicia el demonio en segundo plano (sudo requerido)
           sudo tailscaled &
           sleep 5
 
@@ -27,18 +24,9 @@ jobs:
             echo "::error::ERROR: La clave TAILSCALE_AUTHKEY está vacía o no configurada."
             exit 1 
           else
-            echo "--- 1.2. Autenticando Tailscale ---"
             HOSTNAME="github-mac-runner-$(uuidgen | head -c 8)"
-            # Autentica la máquina y asigna un hostname
             sudo tailscale up --authkey=$TAILSCALE_AUTHKEY --hostname=$HOSTNAME --accept-dns=false
-            
-            # Captura la IP de Tailscale para la conexión
             TS_IP=$(tailscale status | grep $HOSTNAME | grep -v 'offline' | awk '{print $1}')
-            
-            echo "✅ Tailscale está corriendo. IP Address:"
-            tailscale status
-            
-            # Exporta la IP para usarla en pasos posteriores
             echo "TS_IP=$TS_IP" >> $GITHUB_ENV
             echo "--- IP del Runner Activo: $TS_IP ---"
           fi
@@ -47,7 +35,6 @@ jobs:
       - name: 🖥️ Configurar Entorno Gráfico (VNC Nativo)
         run: |
           echo "--- 2. Instalando XQuartz y gestor de ventanas ---"
-          # Instalación de herramientas X11 y gestor de ventanas ligero
           brew install --cask xquartz
           brew install flux
           
@@ -55,18 +42,15 @@ jobs:
           VNC_PASSWORD="password"
           KICKSTART_PATH="/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart"
           
-          # Habilitar la compartición de pantalla a nivel de sistema
+          # 2.2. Habilitar la compartición de pantalla
           sudo defaults write /var/db/launchd.db/com.apple.launchd/overrides.plist com.apple.screensharing -dict Disabled -bool false
           sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist
           
-          # COMANDO KICKSTART 1: Establecer contraseña VNC y activar el servicio
-          echo "--- 2.2. Activar VNC y establecer Contraseña (kickstart 1) ---"
-          sudo $KICKSTART_PATH -activate -configure -clientopts -setvnclegacy -vnclegacy yes -setvncpw $VNC_PASSWORD -vncpw $VNC_PASSWORD
-          
-          # COMANDO KICKSTART 2: Habilitar acceso para el usuario 'runner' y reiniciar el agente
-          echo "--- 2.3. Habilitar Acceso para 'runner' (kickstart 2) ---"
-          # Sintaxis CORRECTA: -access -on y -privs -all
-          sudo $KICKSTART_PATH -configure -users runner -access -on -privs -all -restart -agent
+          # CORRECCIÓN DE SINTAXIS: Usaremos el comando en un solo paso con la sintaxis probada y correcta.
+          # Esto: -setvncpw $VNC_PASSWORD -vncpw $VNC_PASSWORD causó el error "Extra arguments".
+          # Usaremos: -setvncpw $VNC_PASSWORD (más limpio) y garantizaremos la activación y el acceso.
+          echo "--- 2.3. Activar VNC, configurar contraseña y acceso ---"
+          sudo $KICKSTART_PATH -activate -configure -users runner -access -on -privs -all -clientopts -setvnclegacy -vnclegacy yes -setvncpw $VNC_PASSWORD -restart -agent
 
           echo "==========================================================="
           echo "✅ CONEXIÓN GRÁFICA LISTA"
