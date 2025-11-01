@@ -28,31 +28,35 @@ jobs:
             exit 1 
           else
             echo "--- 1.2. Autenticando Tailscale ---"
-            # Capturamos la IP de Tailscale para mostrarla más tarde
             sudo tailscale up --authkey=$TAILSCALE_AUTHKEY --hostname=github-mac-runner --accept-dns=false
+            # Capturamos la IP de Tailscale
             TS_IP=$(tailscale status | grep github-mac-runner | awk '{print $1}')
-            echo "TS_IP=$TS_IP" >> $GITHUB_ENV
+            echo "TS_IP=$TS_IP" >> $GITHUB_ENV # Guardamos la IP como variable de entorno
             echo "✅ Tailscale está corriendo. IP Address:"
             tailscale status
           fi
 
       # 2. Habilitar el Escritorio Remoto (VNC)
       - name: 🖥️ Instalar y Habilitar VNC Server (TigerVNC)
+        # Usamos la sintaxis de bloque literal para que el shell ejecute todo junto
         run: |
           echo "--- 2. Instalando un servidor VNC para acceso gráfico ---"
-          # CORRECCIÓN: Usamos 'tiger-vnc' en lugar de 'tightvnc'
           brew install tiger-vnc
 
-          # Inicializar el servidor VNC. El primer inicio puede pedir una contraseña.
-          # Usamos 'expect' para automatizar el primer inicio del vncserver si es necesario.
-          # Creamos una contraseña simple (por ejemplo, 'password') solo para el inicio.
-          echo -e "password\npassword\n" | vncserver
-
+          # Configuramos una contraseña de VNC y la inicializamos.
+          # Esto evita que el vncserver se quede esperando una entrada.
+          mkdir -p ~/.vnc
+          echo "password" | vncpasswd -f > ~/.vnc/passwd
+          chmod 600 ~/.vnc/passwd
+          
+          # Iniciar el servidor VNC
+          vncserver :1 -geometry 1280x1024 -depth 24
+          
           echo "==========================================================="
           echo "✅ CONEXIÓN GRÁFICA LISTA (TigerVNC)"
-          echo "Utiliza el siguiente link en tu cliente VNC (como RealVNC Viewer):"
+          echo "Utiliza el siguiente link en tu cliente VNC (Recuerda que tu máquina local debe estar en Tailscale):"
           echo "Dirección VNC: ${{ env.TS_IP }}:5901"
-          echo "Contraseña VNC: La que estableciste (o intenta 'password' si usaste el script de arriba)."
+          echo "Contraseña VNC: password"
           echo "==========================================================="
 
       # 3. Instalación de RustDesk
@@ -67,6 +71,3 @@ jobs:
         run: |
           echo "--- 4. Manteniendo la Sesión Abierta (Máx 360 minutos) ---"
           sleep 21600
-```eof
-
-Con este cambio, el paso 2 debería instalar **TigerVNC** y luego iniciarlo para darte acceso al escritorio gráfico.
