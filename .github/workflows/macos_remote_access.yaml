@@ -21,10 +21,11 @@ jobs:
           $InstallerURL = "https://pkgs.tailscale.com/stable/tailscale-setup-latest.msi"
           $InstallerPath = "C:\Users\runneradmin\tailscale-setup.msi"
           
-          Write-Host "Descargando Tailscale MSI con Invoke-WebRequest reforzado..."
-          # Reforzamos el protocolo de seguridad para evitar fallos de descarga
+          Write-Host "Descargando Tailscale MSI con .NET WebClient (Método Definitivo)..."
+          # 💡 FIX: Usamos System.Net.WebClient para evitar fallos de Invoke-WebRequest
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          Invoke-WebRequest -Uri $InstallerURL -OutFile $InstallerPath -MaximumRedirection 5
+          $webclient = New-Object System.Net.WebClient
+          $webclient.DownloadFile($InstallerURL, $InstallerPath)
           
           # Instalación silenciosa del MSI
           Write-Host "Instalando Tailscale silenciosamente..."
@@ -51,9 +52,11 @@ jobs:
           $InstallerURL = "https://dl.google.com/dl/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
           $OutputPath = "C:\Users\runneradmin\chromeremotedesktophost.msi"
           
-          # Descarga reforzada con Invoke-WebRequest
+          Write-Host "Descargando CRD Host con .NET WebClient..."
+          # 💡 FIX: Usamos System.Net.WebClient para la descarga del MSI de CRD
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          Invoke-WebRequest -Uri $InstallerURL -OutFile $OutputPath -MaximumRedirection 5
+          $webclient = New-Object System.Net.WebClient
+          $webclient.DownloadFile($InstallerURL, $OutputPath)
           
           # Instalación silenciosa del MSI
           Write-Host "Instalando Host de CRD..."
