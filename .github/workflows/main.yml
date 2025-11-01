@@ -12,7 +12,13 @@ jobs:
       - name: Install Tailscale
         run: |
           brew install --cask tailscale
-          sudo tailscaled &
+
+      - name: Start Tailscale daemon
+        run: |
+          # Arranca tailscaled en segundo plano
+          sudo tailscaled --tun=userspace-networking --state=/tmp/tailscaled.state &
+          echo "Tailscale daemon started"
+          sleep 5  # espera a que el daemon esté listo
 
       - name: Authenticate and connect to Tailscale
         env:
@@ -20,18 +26,22 @@ jobs:
         run: |
           sudo tailscale up --authkey=${TAILSCALE_AUTH_KEY} --hostname=gh-macos-${GITHUB_RUN_ID}
           echo "TAILSCALE_IP=$(tailscale ip -4)" >> $GITHUB_ENV
+          echo "Connected to Tailscale. IP: $(tailscale ip -4)"
 
-      - name: Create SSH user
+      - name: Create SSH user and key
         run: |
           USERNAME=macuser
+          # Crear usuario temporal
           PASSWORD=$(openssl rand -base64 12)
           sudo sysadminctl -addUser $USERNAME -password $PASSWORD
           sudo dscl . -append /Groups/admin GroupMembership $USERNAME
+          sudo systemsetup -setremotelogin on
+          
+          # Generar clave SSH temporal para el usuario
+          sudo -u $USERNAME ssh-keygen -t ed25519 -f /Users/$USERNAME/.ssh/id_ed25519 -N ""
           echo "SSH_USER=$USERNAME" >> $GITHUB_ENV
           echo "SSH_PASS=$PASSWORD" >> $GITHUB_ENV
-          sudo systemsetup -setremotelogin on
-          echo "User created: $USERNAME"
-          echo "Password: $PASSWORD"
+          echo "SSH_KEY_PATH=/Users/$USERNAME/.ssh/id_ed25519" >> $GITHUB_ENV
 
       - name: Show connection details
         run: |
@@ -39,10 +49,12 @@ jobs:
           echo "Tailscale IP: $TAILSCALE_IP"
           echo "Username: $SSH_USER"
           echo "Password: $SSH_PASS"
-          echo "Connect using: ssh $SSH_USER@$TAILSCALE_IP"
+          echo "Private key path: $SSH_KEY_PATH"
+          echo "Connect using:"
+          echo "ssh -i $SSH_KEY_PATH $SSH_USER@$TAILSCALE_IP"
           echo "===================================================="
 
-      - name: Keep alive
+      - name: Keep runner alive
         run: |
           echo "Keeping SSH session active..."
           while true; do
