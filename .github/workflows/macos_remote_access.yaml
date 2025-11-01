@@ -1,8 +1,3 @@
-
-Nadir El amri <nadirelamri6@gmail.com>
-Sat, Oct 11, 11:07 PM
-to 23nadir.el@institutdemasquefa.cat
-
 name: CRD-Windows
 
 on:
@@ -14,20 +9,6 @@ jobs:
     timeout-minutes: 3600
 
     steps:
-      - name: Set Wallpaper
-        run: |
-          Write-Host "🖼️ Setting custom Windows wallpaper..."
-          # 🔽 Reemplaza este enlace por el link directo de tu imagen (jpg/png)
-          $wallpaperUrl = "https://drive.google.com/uc?export=download&id=1SmRFyijibBDEbnhYSilSGoxtD_-N2KXu"
-          $wallpaperPath = "$env:USERPROFILE\wallpaper.jpg"
-
-          # Descargar imagen
-          Invoke-WebRequest -Uri $wallpaperUrl -OutFile $wallpaperPath
-
-          # Cambiar fondo de escritorio
-          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name wallpaper -Value $wallpaperPath
-          RUNDLL32.EXE user32.dll,UpdatePerUserSystemParameters
-
       - name: Set up Chrome Remote Desktop
         run: |
           Write-Host "🔐 Installing Chrome Remote Desktop..."
@@ -52,7 +33,7 @@ jobs:
       - name: Register Chrome Remote Desktop Host
         run: |
           Write-Host "🔑 Registering Chrome Remote Desktop host..."
-          $authCode = "4/0Ab32j90c6euplvXtAIxlg-8y0H2ExZffAK80Uz8Vzincg-4K09_7XtapyOlOI3jfmQcG3g"
+          $authCode = "4/0Ab32j9270BweUtIci8TVfoDd6wBYxQl6r2liMeK7nIEQFj_CCe5UB7Wupv54saDhNBfIgA"
           $pin = "12345678"
           & "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe" `
               --code="$authCode" `
