@@ -1,4 +1,4 @@
-name: macOS - Tailscale & RustDesk Remote Access (VNC Funcional)
+name: macOS - Tailscale & RustDesk Remote Access (FINAL)
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ jobs:
 
     steps:
       # 1. Configurar e Instalar Tailscale
-      - name: 🚀 Instalar y Configurar Tailscale
+      - name: 🚀 Instalar y Autenticar Tailscale
         env:
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
@@ -27,7 +27,6 @@ jobs:
             exit 1 
           else
             echo "--- 1.2. Autenticando Tailscale ---"
-            # Creamos un hostname único para evitar conflictos y facilitar la limpieza en Tailscale
             HOSTNAME="github-mac-runner-$(uuidgen | head -c 8)"
             sudo tailscale up --authkey=$TAILSCALE_AUTHKEY --hostname=$HOSTNAME --accept-dns=false
             
@@ -42,35 +41,32 @@ jobs:
             echo "--- IP del Runner Activo: $TS_IP ---"
           fi
 
-      # 2. Habilitar el Escritorio Remoto (VNC)
-      - name: 🖥️ Instalar y Habilitar VNC Server (TigerVNC)
+      # 2. Instalar TigerVNC y RustDesk (Instalación)
+      - name: 📦 Instalar Herramientas Remotas (VNC y RustDesk)
         run: |
-          echo "--- 2. Instalando un servidor VNC para acceso gráfico ---"
+          echo "--- 2. Instalando TigerVNC y RustDesk ---"
           brew install tiger-vnc
+          brew install --cask rustdesk
+          echo "RustDesk instalado en /Applications/RustDesk.app"
 
-          echo "--- 2.1. Configurando Contraseña y Daemon VNC ---"
-          # CORRECCIÓN: Usamos la ruta completa /opt/homebrew/bin/ para los comandos
+      # 3. Configurar y Ejecutar VNC (Configuración y Ejecución)
+      - name: 🖥️ Configurar y Habilitar Servidor VNC
+        run: |
+          echo "--- 3. Configurando Contraseña y Daemon VNC ---"
           # Configuramos la contraseña de VNC 'password'
           mkdir -p ~/.vnc
-          echo "password" | /opt/homebrew/bin/vncpasswd -f > ~/.vnc/passwd
+          # NOTA: Usamos 'vncpasswd' sin la ruta completa, ya que en un nuevo paso, el PATH suele estar resuelto.
+          echo "password" | vncpasswd -f > ~/.vnc/passwd
           chmod 600 ~/.vnc/passwd
           
           # Iniciar el servidor VNC
-          /opt/homebrew/bin/vncserver :1 -geometry 1280x1024 -depth 24
+          vncserver :1 -geometry 1280x1024 -depth 24
           
           echo "==========================================================="
           echo "✅ CONEXIÓN GRÁFICA LISTA (TigerVNC)"
-          echo "Utiliza el siguiente link en tu cliente VNC (Recuerda que tu máquina local debe estar en Tailscale):"
           echo "Dirección VNC: ${{ env.TS_IP }}:5901"
           echo "Contraseña VNC: password"
           echo "==========================================================="
-
-      # 3. Instalación de RustDesk
-      - name: 📦 Instalar RustDesk (Opcional)
-        run: |
-          echo "--- 3. Instalando RustDesk vía Homebrew Cask ---"
-          brew install --cask rustdesk
-          echo "RustDesk instalado en /Applications/RustDesk.app"
 
       # 4. Mantener el flujo de trabajo activo
       - name: ⏳ Mantener el Runner Vivo para Acceso Remoto
