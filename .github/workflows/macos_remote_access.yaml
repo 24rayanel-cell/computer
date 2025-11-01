@@ -1,4 +1,4 @@
-ame: Windows - Chrome Remote Desktop (CRD)
+name: Windows - Chrome Remote Desktop (CRD) - Autenticación por Código
 
 on:
   workflow_dispatch:
@@ -11,11 +11,11 @@ jobs:
     
     steps:
       - name: 💾 Descargar e Instalar Chrome Remote Desktop Host
-        # Este paso descarga el MSI del host de CRD para permitir la conexión desatendida.
+        # Descarga el instalador del host de CRD.
         run: |
           $InstallerURL = "https://dl.google.com/dl/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
           $OutputPath = "C:\Users\runneradmin\chromeremotedesktophost.msi"
-          Write-Host "Descargando Chrome Remote Desktop Host desde $InstallerURL"
+          Write-Host "Descargando Chrome Remote Desktop Host..."
           
           # Descargar el instalador
           Invoke-WebRequest -Uri $InstallerURL -OutFile $OutputPath
@@ -25,26 +25,36 @@ jobs:
           Start-Process msiexec -ArgumentList "/i $OutputPath /qn" -Wait
           Write-Host "Instalación completada."
 
-      - name: 🔑 Configurar y Ejecutar Servicio de CRD (¡Atención al Comando!)
-        # Este paso DEBE contener tu comando único de autenticación de Google.
+      - name: 🔑 Configurar y Ejecutar Servicio de CRD
+        # Utiliza tu código de autenticación único y la URL de redireccionamiento.
+        env:
+          CRD_AUTH_CODE: "4/0Ab32j91SMKCxGVyOT2gHvDoL7nXDuhVm-fj0eTuJXVyei7Z2-DmlNU8kxgfiZQJGjkpkqw"
+          CRD_REDIRECT_URL: "https://remotedesktop.google.com/_/oauthredirect"
+          CRD_HOST_NAME: "GitHub-Runner-Windows"
+          CRD_PIN: "123456" # <- PIN que usarás para conectarte, puedes cambiarlo
+
         run: |
-          # =========================================================================================
-          # PASO FUNDAMENTAL: OBTENER EL COMANDO DE CONFIGURACIÓN
-          # 1. Ve a https://remotedesktop.google.com/access
-          # 2. Haz clic en el botón AZUL "Activar" bajo "Configurar acceso remoto".
-          # 3. La web te dará un comando de PowerShell para configurar el servicio.
-          # 4. ¡PEGA ESE COMANDO DE POWERSHELL EN LA LÍNEA DE ABAJO!
-          # =========================================================================================
+          $CRD_PATH = "C:\Program Files\Google\Chrome Remote Desktop\remoting_host.exe"
           
-          # ELIMINA LA LÍNEA DE EJEMPLO DE ABAJO Y REEMPLAZA CON TU COMANDO REAL
-          # Ejemplo de lo que se vería, PERO NO USES ESTO:
-          # C:\Program Files\Google\Chrome Remote Desktop\remoting_host.exe --host-name="GitHub-Runner-1" --pin="123456" --oauth-client-id="..." --oauth-secret="..." --auto-start
+          Write-Host "Configurando el Host de CRD con el código de autenticación..."
+
+          # Comando de configuración y autorización de Google:
+          # Debe ejecutarse como SYSTEM o como administrador con los tokens.
+          & $CRD_PATH --code="$env:CRD_AUTH_CODE" `
+              --redirect-url="$env:CRD_REDIRECT_URL" `
+              --host-name="$env:CRD_HOST_NAME" `
+              --pin="$env:CRD_PIN" `
+              --host-client-id="40693247926.apps.googleusercontent.com" `
+              --host-secret="V0RjYjVwTEdmYlQzY3pBcU40b2Y5Q1g=" `
+              --no-start
+
+          Write-Host "Reiniciando el servicio para aplicar la configuración..."
+          Start-Process -FilePath "C:\Program Files\Google\Chrome Remote Desktop\host_service_cli.exe" -ArgumentList "start" -Wait
           
-          # [TU COMANDO DE CONFIGURACIÓN GENERADO AQUÍ]
-          
-          Write-Host "El servicio de CRD está configurado y se está iniciando. Debería aparecer en la web de CRD pronto."
+          Write-Host "✅ El Host de CRD se está ejecutando. Revisa https://remotedesktop.google.com/access"
 
       - name: ⏳ Mantener el Runner Vivo
         run: |
           Write-Host "Manteniendo el runner vivo por la duración máxima..."
-          Start-Sleep -Seconds 999999
+          # Puedes jugar en la sesión remota hasta que se agote el tiempo de timeout-minutes (9999).
+          Start-Sleep -Seconds 9999999
