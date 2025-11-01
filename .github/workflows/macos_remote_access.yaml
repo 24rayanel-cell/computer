@@ -22,7 +22,7 @@ jobs:
           sudo tailscaled &
           sleep 5
 
-          # CORRECCIÓN DE SINTAXIS: Eliminado 'then' duplicado
+          # CORRECCIÓN DE SINTAXIS
           if [ -z "$TAILSCALE_AUTHKEY" ]; then
             echo "::error::ERROR: La clave TAILSCALE_AUTHKEY está vacía o no configurada."
             exit 1 
@@ -31,7 +31,6 @@ jobs:
             HOSTNAME="github-mac-runner-$(uuidgen | head -c 8)"
             sudo tailscale up --authkey=$TAILSCALE_AUTHKEY --hostname=$HOSTNAME --accept-dns=false
             
-            # Capturamos la IP
             TS_IP=$(tailscale status | grep $HOSTNAME | grep -v 'offline' | awk '{print $1}')
             
             echo "✅ Tailscale está corriendo. IP Address:"
@@ -42,26 +41,25 @@ jobs:
           fi
 
       # 2. Configurar el Entorno Gráfico (XQuartz + VNC Nativo)
-      - name: 🖥️ Configurar Entorno Gráfico (X11/VNC Nativo)
+      - name: 🖥️ Configurar Entorno Gráfico (VNC Nativo)
         run: |
           echo "--- 2. Instalando XQuartz y gestor de ventanas (Fluxbox) ---"
-          # Instalamos XQuartz (X11) y Fluxbox (gestor de ventanas ligero)
           brew install --cask xquartz
           brew install fluxbox
           
           echo "--- 2.1. Habilitando Escritorio Remoto Nativo (VNC) ---"
-          # Habilitamos la compartición de pantalla con una contraseña simple
+          # La contraseña debe ser de 8 caracteres
+          VNC_PASSWORD="password"
+          
+          # 2.2. Habilitar la compartición de pantalla
           sudo defaults write /var/db/launchd.db/com.apple.launchd/overrides.plist com.apple.screensharing -dict Disabled -bool false
           sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist
           
-          # Establecemos la contraseña de VNC (debe ser de 8 caracteres, 'password' lo es)
-          VNC_PASSWORD="password"
-          
-          # Iniciamos el VNC server nativo con la utilidad kickstart
+          # 2.3. Ejecutar kickstart para configurar VNC con contraseña y privilegios
           /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -accesson -users runner -privs -all -clientopts -setvnclegacy -vnclegacy yes -setvncpw $VNC_PASSWORD -vncpw $VNC_PASSWORD
 
           echo "==========================================================="
-          echo "✅ CONEXIÓN GRÁFICA LISTA (VNC Nativo)"
+          echo "✅ CONEXIÓN GRÁFICA LISTA"
           echo "Dirección VNC: ${{ env.TS_IP }}:5900"
           echo "Contraseña VNC: password"
           echo "==========================================================="
