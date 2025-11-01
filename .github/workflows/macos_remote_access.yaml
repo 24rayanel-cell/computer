@@ -1,4 +1,4 @@
-name: macOS - Tailscale & RustDesk Remote Access (VNC Funcional)
+name: macOS - Tailscale & RustDesk Remote Access (VNC Funcional - FINAL)
 
 on:
   workflow_dispatch:
@@ -10,12 +10,12 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      # 1. Configurar e Instalar Tailscale
+      # 1. Instalar Tailscale
       - name: 🚀 Instalar y Autenticar Tailscale
         env:
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
-          echo "--- 1. Instalando Tailscale ---"
+          echo "--- 1. Instalar y Autenticar Tailscale ---"
           brew install tailscale
           
           echo "--- 1.1. Iniciando el servicio Tailscale (daemon) ---"
@@ -39,30 +39,36 @@ jobs:
             echo "--- IP del Runner Activo: $TS_IP ---"
           fi
 
-      # 2. Instalar TigerVNC y RustDesk (Instalación)
+      # 2. Instalar TigerVNC y RustDesk
       - name: 📦 Instalar Herramientas Remotas (VNC y RustDesk)
         run: |
           echo "--- 2. Instalando TigerVNC y RustDesk ---"
+          # Forzamos la instalación y que el binario se establezca
           brew install tiger-vnc
           brew install --cask rustdesk
           echo "RustDesk instalado en /Applications/RustDesk.app"
+          
+          # SOLUCIÓN DE FALLO: Hacemos un link explícito si no existe (a veces necesario en CI)
+          ln -s /opt/homebrew/Cellar/tiger-vnc/*/bin/vncpasswd /opt/homebrew/bin/vncpasswd || true
+          ln -s /opt/homebrew/Cellar/tiger-vnc/*/bin/vncserver /opt/homebrew/bin/vncserver || true
 
-      # 3. Configurar y Ejecutar VNC (Configuración y Ejecución con ruta absoluta)
+
+      # 3. Configurar y Ejecutar VNC (¡Ahora con los binarios asegurados!)
       - name: 🖥️ Configurar y Habilitar Servidor VNC
         run: |
           echo "--- 3. Configurando Contraseña y Daemon VNC ---"
-          # CORRECCIÓN DEFINITIVA: Usamos la ruta absoluta a los binarios de TigerVNC
-          TIGER_VNC_BIN="/opt/homebrew/bin"
-
+          
           echo "--- 3.1. Estableciendo Contraseña VNC ---"
+          # Usamos la ruta absoluta que Homebrew debería haber configurado
+          VNC_BIN_PATH="/opt/homebrew/bin"
+
           mkdir -p ~/.vnc
-          # Usamos la ruta absoluta /opt/homebrew/bin/vncpasswd
-          echo "password" | $TIGER_VNC_BIN/vncpasswd -f > ~/.vnc/passwd
+          # Usamos la ruta absoluta asegurada
+          echo "password" | $VNC_BIN_PATH/vncpasswd -f > ~/.vnc/passwd
           chmod 600 ~/.vnc/passwd
           
           echo "--- 3.2. Iniciando Servidor VNC ---"
-          # Usamos la ruta absoluta /opt/homebrew/bin/vncserver
-          $TIGER_VNC_BIN/vncserver :1 -geometry 1280x1024 -depth 24
+          $VNC_BIN_PATH/vncserver :1 -geometry 1280x1024 -depth 24
           
           echo "==========================================================="
           echo "✅ CONEXIÓN GRÁFICA LISTA (TigerVNC)"
