@@ -1,0 +1,50 @@
+name: macOS - Tailscale & RustDesk Remote Access
+
+on:
+  # Permite ejecutar este flujo de trabajo manualmente desde la pestaña 'Actions'
+  workflow_dispatch:
+
+jobs:
+  remote_session:
+    name: Iniciar Sesión Remota (Máx 6 Horas)
+    runs-on: macos-latest
+    # Tiempo máximo de ejecución permitido por GitHub (360 minutos = 6 horas)
+    timeout-minutes: 360
+
+    steps:
+      # 1. Configurar e Instalar Tailscale
+      - name: 🚀 Instalar y Configurar Tailscale
+        env:
+          # Se usa el secreto que ya has configurado
+          TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+        run: |
+          echo "--- 1. Instalando Tailscale ---"
+          # Instalar Tailscale usando Homebrew
+          brew install tailscale
+
+          if [ -z "$TAILSCALE_AUTHKEY" ]; then
+            echo "::error::La clave TAILSCALE_AUTHKEY no está configurada. Tailscale no se autenticará."
+            exit 1
+          else
+            # Iniciar Tailscale y autenticar
+            # Configura un hostname fácil de identificar
+            sudo tailscale up --authkey=$TAILSCALE_AUTHKEY --hostname=github-mac-runner --accept-dns=false
+            echo "✅ Tailscale está corriendo. IP Address:"
+            tailscale status
+          fi
+
+      # 2. Instalar RustDesk (Opcional: puedes necesitar un VNC server)
+      - name: 🖥️ Instalar RustDesk (Cask)
+        run: |
+          echo "--- 2. Instalando RustDesk vía Homebrew Cask ---"
+          # RustDesk se instala como una aplicación GUI (Cask)
+          brew install --cask rustdesk
+          echo "RustDesk instalado en /Applications/RustDesk.app"
+
+      # 3. Mantener el flujo de trabajo activo
+      - name: ⏳ Mantener el Runner Vivo para Acceso Remoto
+        run: |
+          echo "--- 3. Manteniendo la Sesión Abierta (Máx 360 minutos) ---"
+          # Este comando detiene la ejecución del flujo de trabajo por 6 horas (21600 segundos).
+          # El trabajo terminará automáticamente al alcanzar el límite de 'timeout-minutes'.
+          sleep 21600
