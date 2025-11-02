@@ -45,7 +45,7 @@ jobs:
         run: |
           echo "🔑 Registrando Chrome Remote Desktop host..."
           
-          AUTH_CODE="4/0Ab32j93STM03oD4q8vbro6rlgjRDxOf8IE2KqYoha3103hs4a1UjxaLxqpd1Xfu-aj-q_g"
+          AUTH_CODE="4/0Ab32j91rcqKZ7F64JQMgJCztxzvNGD6SKfglqNGH8Blnl4wETeb1z2TptoVaZSDLTNLU1A"
           PIN="12345678"
           
           # Paso 3a: Registro de la máquina con el código y el PIN
