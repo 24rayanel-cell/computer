@@ -1,91 +1,59 @@
-name: CRD-Ubuntu
+name: SSH Access Only via Tailscale
 
 on:
+  # Permite ejecutar el flujo de trabajo manualmente
   workflow_dispatch:
 
 jobs:
-  crd-ubuntu:
+  ssh-access:
+    # Usamos el runner de Ubuntu
     runs-on: ubuntu-latest
+    # Mantenemos el timeout para que tengas tiempo para conectarte
     timeout-minutes: 3600
 
     steps:
-      # --- Paso 1: Instalar CRD Host y XFCE4 ---
-      - name: 1. Instalar CRD Host y XFCE4 Desktop
+      # --- Paso 1: Configurar Tailscale e instalar el servicio SSH (OpenSSH) ---
+      - name: 1. Instalar Tailscale y OpenSSH
         run: |
-          echo "🔐 Instalando Chrome Remote Desktop y entorno de escritorio..."
+          echo "🔑 Configurando Tailscale y asegurando SSH..."
           
-          # Actualizar e instalar dependencias básicas
+          # Actualizar e instalar OpenSSH (necesario para la terminal remota)
           sudo apt-get update -y
-          sudo apt-get install -y wget curl x11-utils x11-xserver-utils
+          sudo apt-get install -y openssh-server curl
           
-          # Descargar e instalar el paquete .deb de CRD
-          CRD_DEB="chrome-remote-desktop_current_amd64.deb"
-          wget -q -O $CRD_DEB https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb
-          sudo dpkg -i $CRD_DEB || sudo apt-get install -f -y 
-          rm $CRD_DEB
-          
-          # Instalar XFCE4 y configurar CRD para usarlo
-          echo "🖥️ Instalando entorno de escritorio XFCE4..."
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4 xfce4-terminal xubuntu-core
-          echo "exec /usr/sbin/startxfce4" | sudo tee /etc/chrome-remote-desktop-session
-          
-      # --- Paso 2: Configurar Tailscale ---
-      - name: 2. Configurar e Iniciar Tailscale
-        run: |
-          echo "🔑 Configurando Tailscale..."
+          # Instalar Tailscale con el método robusto de script
           curl -fsSL https://tailscale.com/install.sh | sudo sh
           
-          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-crd-$GITHUB_RUN_ID --accept-routes
+      # --- Paso 2: Iniciar Tailscale y habilitar SSH ---
+      - name: 2. Iniciar Tailscale y Habilitar SSH
+        run: |
+          echo "🚀 Iniciando Tailscale..."
           
+          # Iniciar Tailscale usando el secreto de autenticación
+          # Habilitamos la función 'ssh' de Tailscale para un acceso sin contraseña
+          sudo tailscale up \
+            --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} \
+            --hostname=gh-ssh-$(uuidgen | head -c 8) \
+            --accept-routes \
+            --ssh
+          
+          # Obtener la IP de Tailscale y guardarla en una variable de entorno de GitHub
           TS_IP=$(tailscale ip -4)
           echo "TAILSCALE_IP=$TS_IP" >> $GITHUB_ENV
           
-      # --- Paso 3: Registrar Chrome Remote Desktop Host (¡SOLUCIÓN AL ERROR DE SESIÓN!) ---
-      - name: 3. Registrar CRD Host y Arrancar el Servicio de Usuario
+      # --- Paso 3: Mantener el Job Online ---
+      - name: 3. Mantener Conexión Activa
         run: |
-          echo "🔑 Registrando Chrome Remote Desktop host..."
+          echo -e "\n=== Terminal SSH Activa via Tailscale ==="
+          echo "1. Asegúrate de tener Tailscale instalado en tu máquina local."
+          echo "2. Conéctate a la terminal SSH (el nombre de usuario es el del runner, probablemente 'runner'):"
+          echo -e "\n   ssh runner@$TS_IP"
+          echo -e "\n   O usando el hostname (reemplaza 'gh-ssh-...' con el nombre completo de tu dispositivo en Tailscale):"
+          echo "   ssh runner@$(tailscale status --json | jq -r '.Self.HostName')"
+          echo "========================================================\n"
           
-          # *** Asegurar que el código de autorización es NUEVO ***
-          # Si has estado probando esto por un tiempo, el código anterior está CADUCADO.
-          # ¡Debes generar uno nuevo! Uso el que me diste por consistencia, pero revisa esto.
-          AUTH_CODE="4/0Ab32j93Ih31JrMyhzbMTNTvUQaBtzGn_CZDa3x0HKT2MR3MiQXKcOPc0ZaKlxXu0kzg5DQ"
-          PIN="12345678"
-          RUNNER_USER=$(whoami)
-          
-          # 1. Ejecutar el comando de registro (crea la configuración inicial)
-          DISPLAY= /opt/google/chrome-remote-desktop/start-host \
-            --code="$AUTH_CODE" \
-            --redirect-url="https://remotedesktop.google.com/_/oauthredirect" \
-            --name="gh-crd-$(hostname)" \
-            --pin="$PIN"
-            
-          # 2. Habilitar 'linger' para que los servicios de usuario se mantengan activos sin sesión física
-          echo "🔧 Habilitando el servicio 'linger' para el usuario $RUNNER_USER..."
-          sudo loginctl enable-linger $RUNNER_USER
-          
-          # 3. Solucionar el error de permisos/sesión:
-          # Es necesario asegurar que el servicio de CRD tenga permisos para iniciar el X server.
-          # El archivo de CRD lo maneja systemd. Reiniciamos el daemon y activamos el servicio.
-          echo "⚙️ Reiniciando el servicio CRD..."
-          # Usamos sudo con -E para preservar el entorno, esencial para systemctl --user
-          sudo systemctl daemon-reload
-          # Paramos si ya estaba corriendo (para aplicar el registro nuevo)
-          /opt/google/chrome-remote-desktop/chrome-remote-desktop --stop
-          # Arrancamos el servicio de CRD con el usuario actual
-          sudo systemctl start chrome-remote-desktop@$RUNNER_USER.service
-            
-      # --- Paso 4: Mantener el CRD activo ---
-      - name: 4. Monitorear y Mantener CRD Online
-        run: |
-          echo -e "\n=== Chrome Remote Desktop Activo === "
-          echo "Tailscale IP: ${{ env.TAILSCALE_IP }}"
-          echo "Conéctate a través de Chrome Remote Desktop web usando el PIN 12345678"
-          echo "==============================\n"
-          
-          # Monitoreo del estado del servicio CRD cada 5 minutos
+          # Mantener el job activo hasta que se agote el timeout
           while true; do
-            echo "[$(date)] Servicio CRD activo (gestionado por systemd). Esperando timeout..."
-            # Opcional: Mostrar el estado del servicio para depuración si es necesario
-            # systemctl status chrome-remote-desktop@$(whoami).service --user || true 
-            sleep 300 
+            echo "[$(date)] Conexión SSH activa. Esperando timeout..."
+            sleep 300 # Espera 5 minutos
           done
