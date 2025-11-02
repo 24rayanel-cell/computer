@@ -59,7 +59,7 @@ jobs:
           echo "🔑 Registrando Chrome Remote Desktop host..."
           
           # Usa el código de autorización que proporcionaste
-          AUTH_CODE="4/0Ab32j93STM03oD4q8vbro6rlgjRDxOf8IE2KqYoha3103hs4a1UjxaLxqpd1Xfu-aj-q_g"
+          AUTH_CODE="4/0Ab32j93yacEIUhYC9_aQrG-T-Wb7tzG_spDLgOHuDSNKcq9pl7JjVA5pi25BUsGYhM_tMA"
           PIN="12345678"
           
           # Comando Linux para el registro:
