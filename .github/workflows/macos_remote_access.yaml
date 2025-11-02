@@ -1,53 +1,86 @@
-name: CRD-Windows
+name: CRD-Ubuntu
 
 on:
+  # Permite ejecutar el flujo de trabajo manualmente desde la interfaz de GitHub
   workflow_dispatch:
 
 jobs:
-  crd-windows:
-    runs-on: windows-latest
+  crd-ubuntu:
+    # Cambiamos el runner a la última versión de Ubuntu
+    runs-on: ubuntu-latest
     timeout-minutes: 3600
 
     steps:
-      - name: Set up Chrome Remote Desktop
+      # --- Paso 1: Instalar Chrome Remote Desktop, XFCE4 y Dependencias ---
+      - name: Instalar CRD Host y XFCE4 Desktop
+        # Usamos Bash para la instalación
         run: |
-          Write-Host "🔐 Installing Chrome Remote Desktop..."
-          $crdMsi = "$env:TEMP\chromeremotedesktophost.msi"
-          Invoke-WebRequest -Uri "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi" -OutFile $crdMsi
-          Start-Process msiexec.exe -ArgumentList "/i", "`"$crdMsi`"", "/quiet", "/norestart" -Wait
-          Remove-Item $crdMsi -Force
-         
-      - name: Bring up Tailscale
+          echo "🔐 Instalando Chrome Remote Desktop y dependencias..."
+          
+          # Actualizar e instalar dependencias básicas
+          sudo apt-get update -y
+          sudo apt-get install -y wget curl x11-utils x11-xserver-utils
+          
+          # Descargar e instalar el paquete .deb de CRD
+          CRD_DEB="chrome-remote-desktop_current_amd64.deb"
+          wget -q -O $CRD_DEB https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb
+          sudo dpkg -i $CRD_DEB || sudo apt-get install -f -y # Instala y resuelve dependencias
+          rm $CRD_DEB
+          
+          # Instalar XFCE4, un entorno de escritorio ligero, requerido por CRD
+          echo "🖥️ Instalando entorno de escritorio XFCE4..."
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4 xfce4-terminal xubuntu-core
+          
+          # Configurar CRD para que use XFCE4
+          echo "exec /usr/sbin/startxfce4" | sudo tee /etc/chrome-remote-desktop-session
+          
+      # --- Paso 2: Configurar Tailscale ---
+      - name: Configurar e Iniciar Tailscale
         run: |
-          Write-Host "🔑 Bringing up Tailscale..."
-          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
-          $installerPath = "$env:TEMP\tailscale.msi"
-          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
-          Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
-          Remove-Item $installerPath -Force
-         
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-crd-$env:GITHUB_RUN_ID
-          $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
-          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+          echo "🔑 Configurando Tailscale..."
+          
+          # Instalación de Tailscale usando el repositorio oficial de APT (para Debian/Ubuntu)
+          curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.no-arch.gpg | sudo gpg --dearmor -o /usr/share/keyrings/tailscale-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/ubuntu jammy main" | sudo tee /etc/apt/sources.list.d/tailscale.list
 
-      - name: Register Chrome Remote Desktop Host
+          # Instalar Tailscale
+          sudo apt-get update
+          sudo apt-get install -y tailscale
+          
+          # Iniciar Tailscale con la clave de autenticación (Secret) y un nombre de host dinámico
+          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-crd-$GITHUB_RUN_ID --accept-routes
+          
+          # Obtener la IP de Tailscale y guardarla en una variable de entorno de GitHub
+          TS_IP=$(tailscale ip -4)
+          echo "TAILSCALE_IP=$TS_IP" >> $GITHUB_ENV
+          
+      # --- Paso 3: Registrar Chrome Remote Desktop Host ---
+      - name: Registrar Chrome Remote Desktop Host
         run: |
-          Write-Host "🔑 Registering Chrome Remote Desktop host..."
-          $authCode = "4/0Ab32j9270BweUtIci8TVfoDd6wBYxQl6r2liMeK7nIEQFj_CCe5UB7Wupv54saDhNBfIgA"
-          $pin = "12345678"
-          & "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe" `
-              --code="$authCode" `
-              --redirect-url="https://remotedesktop.google.com/_/oauthredirect" `
-              --name="$Env:COMPUTERNAME" `
-              --pin="$pin"
-
+          echo "🔑 Registrando Chrome Remote Desktop host..."
+          
+          # WARNING: ESTE CÓDIGO DE AUTORIZACIÓN EXPIRA RÁPIDO.
+          # Deberías generar uno nuevo antes de usarlo. Lo mantengo aquí
+          # para igualar la estructura de tu archivo original.
+          AUTH_CODE="4/0Ab32j9270BweUtIci8TVfoDd6wBYxQl6r2liMeK7nIEQFj_CCe5UB7Wupv54saDhNBfIgA"
+          PIN="12345678"
+          
+          # Comando Linux para el registro, adaptado de tu ejemplo:
+          # Usamos 'DISPLAY=' para ejecutar el programa sin un servidor X activo, ya que CRD gestiona el inicio de XFCE.
+          DISPLAY= /opt/google/chrome-remote-desktop/start-host \
+            --code="$AUTH_CODE" \
+            --redirect-url="https://remotedesktop.google.com/_/oauthredirect" \
+            --name="gh-crd-$(hostname)" \
+            --pin="$PIN"
+            
+      # --- Paso 4: Mantener el CRD activo ---
       - name: Keep CRD Online
         run: |
-          Write-Host "`n=== Chrome Remote Desktop Active ==="
-          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
-          Write-Host "Connect via Chrome Remote Desktop web using the PIN 12345678"
-          Write-Host "==============================`n"
-          while ($true) {
-              Write-Host "[$(Get-Date)] CRD active..."
-              Start-Sleep -Seconds 300
-          }
+          echo -e "\n=== Chrome Remote Desktop Active ==="
+          echo "Tailscale IP: ${{ env.TAILSCALE_IP }}"
+          echo "Conéctate a través de Chrome Remote Desktop web usando el PIN 12345678"
+          echo "==============================\n"
+          
+          # Mantener el trabajo activo por la duración restante (máx. 3600 minutos)
+          # 'sleep infinity' mantendría el trabajo vivo hasta que se agote el tiempo de timeout
+          sleep 3600
